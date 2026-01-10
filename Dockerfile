@@ -16,7 +16,7 @@ RUN \
   ARCH="$(dpkg --print-architecture)" && \
   if [ "${ARCH}" != "amd64" ]; then \
     echo "This image only supports amd64 (detected: ${ARCH})." && \
-    echo "If you're building on Apple Silicon, use: podman build --arch amd64 ..." && \
+    echo "If you're building on a different host arch, use your engine's cross-build flag (e.g. docker --platform=linux/amd64)." && \
     exit 1; \
   fi && \
   echo "**** add icon ****" && \
@@ -58,6 +58,10 @@ RUN \
 
 # add local files
 COPY /root /
+
+RUN chmod +x \
+  /usr/local/bin/steam-selkies \
+  /etc/cont-init.d/99-steam-selkies-autostart-migrate.sh
 
 # ports and volumes
 EXPOSE 3001 \

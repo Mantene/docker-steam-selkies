@@ -8,4 +8,11 @@ if command -v sunshine >/dev/null 2>&1; then
 fi
 
 # Steam will run via XWayland in the Wayland session.
-steam
+if command -v unshare >/dev/null 2>&1; then
+  if ! unshare -Ur true >/dev/null 2>&1; then
+    echo "steam-selkies: warning: user namespaces appear unavailable; Steam may exit with 'Steam now requires user namespaces'." >>/config/steam-selkies.log
+  fi
+  steam-selkies
+else
+  steam-selkies
+fi

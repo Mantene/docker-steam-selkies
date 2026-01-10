@@ -1,0 +1,78 @@
+#!/bin/sh
+set -eu
+
+STEAM_LAUNCHER=/usr/bin/steam
+STEAMCONFIG="${HOME}/.steam"
+STEAMDIR="${HOME}/.steam/debian-installation"
+
+mkdir -p "${STEAMCONFIG}" "${STEAMDIR}"
+
+if ! [ -d "${STEAMCONFIG}/steam" ]; then
+  ln -fns "${STEAMDIR}" "${STEAMCONFIG}/steam"
+fi
+if ! [ -d "${STEAMCONFIG}/root" ]; then
+  ln -fns "${STEAMDIR}" "${STEAMCONFIG}/root"
+fi
+
+need_install=
+for needed in \
+  steam.sh \
+  ubuntu12_32/steam \
+  ubuntu12_32/steam-runtime/run.sh \
+  ubuntu12_32/steam-runtime/setup.sh \
+; do
+  if ! [ -x "${STEAMDIR}/${needed}" ]; then
+    need_install=yes
+    break
+  fi
+done
+
+if [ -n "${need_install}" ]; then
+  if ! [ -r "${STEAM_LAUNCHER}" ]; then
+    echo "steam-selkies: ${STEAM_LAUNCHER} not found" >&2
+    exit 1
+  fi
+
+  version=$(grep -E '^version=' "${STEAM_LAUNCHER}" | head -n 1 | sed -E 's/^version="([^"]+)"/\1/')
+  sha256=$(grep -E '^sha256=' "${STEAM_LAUNCHER}" | head -n 1 | sed -E 's/^sha256="([^"]+)"/\1/')
+
+  if [ -z "${version}" ] || [ -z "${sha256}" ]; then
+    echo "steam-selkies: failed to parse version/sha256 from ${STEAM_LAUNCHER}" >&2
+    exit 1
+  fi
+
+  # Debian's launcher stores a URL template with ${version}, but extracting it
+  # verbatim does not expand the variable. Build the URL ourselves instead.
+  url="https://repo.steampowered.com/steam/archive/beta/steam_${version}.tar.gz"
+
+  installer_dir="${STEAMDIR}/deb-installer"
+  mkdir -p "${installer_dir}"
+
+  tarball="${installer_dir}/steam_${version}.tar.gz"
+  if ! [ -f "${tarball}" ]; then
+    echo "steam-selkies: downloading Steam bootstrap ${version}..." >&2
+    curl -fsSL -o "${tarball}" "${url}"
+  fi
+
+  echo "${sha256}  ${tarball}" | sha256sum -c -
+
+  rm -rf "${installer_dir}/steam-launcher" "${STEAMDIR}/bootstrap.tar.xz"
+  tar \
+    -C "${installer_dir}" \
+    -zxf "${tarball}" \
+    steam-launcher/bootstraplinux_ubuntu12_32.tar.xz \
+    steam-launcher/icons \
+    steam-launcher/steam.desktop \
+  ;
+
+  mv \
+    "${installer_dir}/steam-launcher/bootstraplinux_ubuntu12_32.tar.xz" \
+    "${STEAMDIR}/bootstrap.tar.xz"
+
+  tar -C "${STEAMDIR}" -xf "${STEAMDIR}/bootstrap.tar.xz"
+
+  echo "steam-selkies: Steam bootstrap installed into ${STEAMDIR}" >&2
+fi
+
+cd "${STEAMDIR}"
+exec "${STEAMDIR}/steam.sh" "$@"
