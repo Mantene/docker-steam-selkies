@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Start Sunshine (GameStream server) in the background.
+if command -v sunshine >/dev/null 2>&1; then
+  if ! pgrep -x sunshine >/dev/null 2>&1; then
+    sunshine >/config/sunshine.log 2>&1 &
+  fi
+fi
+
+# Launch Steam.
+steam
