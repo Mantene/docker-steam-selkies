@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Steam</Name>
+  <Repository>mantene/steam-selkies:latest</Repository>
+  <Registry>https://docker.io/mantene/steam-selkies</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>true</Privileged>
+  <Support/>
+  <Project>https://github.com/Mantene/docker-steam-selkies</Project>
+  <ReadMe/>
+  <Overview/>
+  <Category>GameServers:</Category>
+  <WebUI>https://[IP]:[PORT:20001]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/Josh5/docker-steam-headless/master/images/steam-icon.png</Icon>
+  <ExtraParams>--gpus all --runtime nvidia --device /dev/dri:/dev/dri --security-opt seccomp=unconfined  --group-add=video --group-add=render</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1768099708</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI" Target="3001" Default="20001" Mode="tcp" Description="" Type="Port" Display="always" Required="true" Mask="false">20001</Config>
+  <Config Name="Timezone" Target="TZ" Default="UTC" Mode="" Description="" Type="Variable" Display="always" Required="true" Mask="false">America/New_York</Config>
+  <Config Name="Config Directory" Target="/config" Default="/mnt/cache/appdata/steam/steamconfig" Mode="rw" Description="" Type="Path" Display="always-hide" Required="true" Mask="false">/mnt/cache/appdata/steam/steamconfig</Config>
+  <Config Name="Games Mount" Target="/games" Default="/mnt/user/data/games" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/data/games</Config>
+  <Config Name="DRINODE" Target="DRINODE" Default="/dev/dri/card0" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">/dev/dri/card0</Config>
+  <Config Name="WLR_DRM_DEVICES" Target="WLR_DRM_DEVICES" Default="/dev/dri/card0" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">/dev/dri/card0</Config>
+  <Config Name="WLR_RENDER_DRM_DEVICE" Target="WLR_RENDER_DRM_DEVICE" Default="/dev/dri/renderD128" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">/dev/dri/renderD128</Config>
+  <Config Name="SELKIES_ENCODER" Target="SELKIES_ENCODER" Default="jpeg" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">jpeg</Config>
+  <Config Name="MAX_RES" Target="MAX_RES" Default="1920x1080 " Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">1920x1080</Config>
+  <Config Name="SELKIES_MANUAL_WIDTH" Target="SELKIES_MANUAL_WIDTH" Default="1920" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">1920</Config>
+  <Config Name="SELKIES_MANUAL_HEIGHT" Target="SELKIES_MANUAL_HEIGHT" Default="1080" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">1080</Config>
+  <Config Name="NVIDIA_DRIVER_CAPABILITIES" Target="NVIDIA_DRIVER_CAPABILITIES" Default="all" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">all</Config>
+  <Config Name="SELKIES_USE_BROWSER_CURSORS" Target="SELKIES_USE_BROWSER_CURSORS" Default="false" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Shared Memory" Target="/dev/shm" Default="/dev/shm" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">/dev/shm</Config>
+  <Config Name="SELKIES_WAYLAND_SOCKET_INDEX" Target="SELKIES_WAYLAND_SOCKET_INDEX" Default="1" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">1</Config>
+  <Config Name="WLR_DRM_DEVICES" Target="WLR_DRM_DEVICES" Default="/dev/dri/card0" Mode="" Description="" Type="Variable" Display="advanced-hide" Required="false" Mask="false">/dev/dri/card0</Config>
+  <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="" Type="Variable" Display="advanced-hide" Required="false" Mask="false">022</Config>
+  <Config Name="Sunshine1 Port" Target="47984" Default="47984" Mode="tcp" Description="" Type="Port" Display="advanced-hide" Required="true" Mask="false">47984</Config>
+  <Config Name="Sunshine 2 Port" Target="47989" Default="47989" Mode="tcp" Description="" Type="Port" Display="advanced-hide" Required="true" Mask="false">47989</Config>
+  <Config Name="Sunshine 4 Ports" Target="47998-48000" Default="47998-48000" Mode="udp" Description="" Type="Port" Display="advanced-hide" Required="true" Mask="false">47998-48000</Config>
+  <Config Name="TITLE" Target="TITLE" Default="Steam" Mode="" Description="" Type="Variable" Display="advanced-hide" Required="false" Mask="false">Steam</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="" Type="Variable" Display="advanced-hide" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="" Type="Variable" Display="advanced-hide" Required="true" Mask="false">100</Config>
+  <Config Name="Sunshine 3 Port" Target="48010" Default="48010" Mode="tcp" Description="" Type="Port" Display="advanced-hide" Required="true" Mask="false">48010</Config>
+  <Config Name="PIXELFLUX_WAYLAND" Target="PIXELFLUX_WAYLAND" Default="false" Mode="" Description="" Type="Variable" Display="advanced-hide" Required="true" Mask="false">true</Config>
+  <TailscaleStateDir/>
+</Container>
