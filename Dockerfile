@@ -66,6 +66,7 @@ RUN chmod +x \
   /usr/local/bin/selkies-smoke-test \
   /usr/local/bin/steam-selkies \
   /etc/cont-init.d/45-selkies-wayland-socket-index.sh \
+  /etc/cont-init.d/46-dbus-login1-override.sh \
   /etc/cont-init.d/99-steam-selkies-autostart-migrate.sh
 
 # ports and volumes
