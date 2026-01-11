@@ -5,7 +5,14 @@ set -euo pipefail
 
 get_dbus_service_dirs() {
 	local conf
+	# Try known entrypoints first.
 	for conf in /etc/dbus-1/system.conf /usr/share/dbus-1/system.conf; do
+		[ -f "${conf}" ] || continue
+		sed -n 's:.*<servicedir>\(.*\)</servicedir>.*:\1:p' "${conf}" || true
+	done
+
+	# Also scan for other configs that may define servicedirs (some base images swap configs).
+	for conf in /etc/dbus-1/*.conf /usr/share/dbus-1/*.conf /etc/dbus-1/system.d/*.conf /usr/share/dbus-1/system.d/*.conf; do
 		[ -f "${conf}" ] || continue
 		sed -n 's:.*<servicedir>\(.*\)</servicedir>.*:\1:p' "${conf}" || true
 	done
@@ -26,6 +33,20 @@ find_elogind_bin() {
 			return 0
 		fi
 	done
+
+	# Fallback: ask dpkg where the package installed the daemon.
+	if command -v dpkg-query >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; then
+		if dpkg-query -W -f='${Status}' elogind 2>/dev/null | grep -q "installed"; then
+			while IFS= read -r p; do
+				[ -n "${p}" ] || continue
+				if [ -x "${p}" ] && echo "${p}" | grep -Eq '/elogind$'; then
+					echo "${p}"
+					return 0
+				fi
+			done < <(dpkg -L elogind 2>/dev/null || true)
+		fi
+	fi
+
 	return 1
 }
 
@@ -35,7 +56,7 @@ if ! elogind_bin="$(find_elogind_bin)"; then
 	exit 0
 fi
 
-service_dirs="$(get_dbus_service_dirs | awk 'NF' | sort -u)"
+service_dirs="$(get_dbus_service_dirs | awk 'NF' | grep -E '/system-services/?$' | sort -u)"
 if [ -z "${service_dirs}" ]; then
 	service_dirs=$(cat <<'EOF'
 /etc/dbus-1/system-services

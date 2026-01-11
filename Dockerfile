@@ -45,13 +45,21 @@ RUN \
     steam-installer && \
   echo "**** ensure elogind daemon path ****" && \
   ELOGIND_DAEMON="" && \
-  for p in \
-    /usr/lib/elogind/elogind \
-    /lib/elogind/elogind \
-    /usr/libexec/elogind/elogind \
-    /libexec/elogind/elogind; do \
-    if [ -x "${p}" ]; then ELOGIND_DAEMON="${p}"; break; fi; \
-  done && \
+  if dpkg -L elogind >/dev/null 2>&1; then \
+    ELOGIND_DAEMON="$(dpkg -L elogind 2>/dev/null | awk '/\/elogind$/{print; exit}')"; \
+  fi && \
+  if [ -n "${ELOGIND_DAEMON}" ] && [ ! -x "${ELOGIND_DAEMON}" ]; then \
+    ELOGIND_DAEMON=""; \
+  fi && \
+  if [ -z "${ELOGIND_DAEMON}" ]; then \
+    for p in \
+      /usr/lib/elogind/elogind \
+      /lib/elogind/elogind \
+      /usr/libexec/elogind/elogind \
+      /libexec/elogind/elogind; do \
+      if [ -x "${p}" ]; then ELOGIND_DAEMON="${p}"; break; fi; \
+    done; \
+  fi && \
   if [ -z "${ELOGIND_DAEMON}" ]; then \
     echo "ERROR: elogind daemon binary not found after install" >&2; \
     dpkg -L elogind || true; \
@@ -84,6 +92,7 @@ RUN chmod +x \
   /usr/local/bin/steam-selkies \
   /etc/cont-init.d/45-selkies-wayland-socket-index.sh \
   /etc/cont-init.d/46-dbus-login1-override.sh \
+  /etc/cont-init.d/47-dbus-servicehelper-permissions.sh \
   /etc/cont-init.d/99-steam-selkies-autostart-migrate.sh
 
 # ports and volumes
