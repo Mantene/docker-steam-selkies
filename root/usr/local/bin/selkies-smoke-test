@@ -1,0 +1,29 @@
+#!/bin/bash
+set -euo pipefail
+
+if [ "${STEAM_DEBUG_SMOKE_TEST:-}" != "true" ]; then
+  exit 0
+fi
+
+log_file=/config/steam-selkies.log
+
+(
+  echo "steam-selkies: smoke test enabled (STEAM_DEBUG_SMOKE_TEST=true)"
+  echo "steam-selkies: attempting to launch xterm to verify compositor+stream"
+) >>"${log_file}" 2>&1
+
+# Give the compositor/XWayland a moment to come up.
+sleep 1
+
+if command -v xterm >/dev/null 2>&1; then
+  # Run in background; keep it visible without stealing focus too aggressively.
+  (xterm -title "Selkies Smoke Test" -geometry 90x24 -e bash -lc 'echo "Selkies smoke test: if you can see this window, capture+streaming is working."; echo; echo "Close this window when done."; exec bash') \
+    >>"${log_file}" 2>&1 &
+  exit 0
+fi
+
+(
+  echo "steam-selkies: smoke test requested but xterm not found"
+) >>"${log_file}" 2>&1
+
+exit 0

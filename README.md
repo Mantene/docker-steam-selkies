@@ -228,6 +228,14 @@ If JPEG works but H.264 is black, the issue is likely codec/decode support or an
 
 - `SELKIES_DEBUG=true`
 
+6a) Optional smoke test (forces a visible window)
+
+If you suspect Steam is running but not drawing a window, you can force a known GUI window to appear:
+
+- `STEAM_DEBUG_SMOKE_TEST=true`
+
+This launches an `xterm` window titled “Selkies Smoke Test” during session startup.
+
 Also double-check `MAX_RES` has no trailing spaces (e.g. use `MAX_RES=1920x1080`, not `1920x1080 `), as the Wayland backend parses it as `WxH`.
 
 7) NVENC note (NVIDIA)

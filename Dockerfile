@@ -36,8 +36,10 @@ RUN \
   apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    elogind \
     jq \
     kmod \
+    xterm \
     wget \
     va-driver-all \
     steam-installer && \
@@ -60,7 +62,10 @@ RUN \
 COPY /root /
 
 RUN chmod +x \
+  /usr/local/bin/elogind-wrapper \
+  /usr/local/bin/selkies-smoke-test \
   /usr/local/bin/steam-selkies \
+  /etc/cont-init.d/45-selkies-wayland-socket-index.sh \
   /etc/cont-init.d/99-steam-selkies-autostart-migrate.sh
 
 # ports and volumes

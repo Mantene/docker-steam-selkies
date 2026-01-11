@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.freedesktop.login1
+Exec=/usr/local/bin/elogind-wrapper
+User=root
+SystemdService=elogind.service

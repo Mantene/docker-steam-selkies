@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+# Run elogind even when paths differ across distros.
+for p in \
+  /lib/elogind/elogind \
+  /usr/lib/elogind/elogind \
+  /usr/libexec/elogind \
+  /usr/libexec/elogind/elogind \
+; do
+  if [ -x "$p" ]; then
+    exec "$p" "$@"
+  fi
+done
+
+echo "elogind-wrapper: elogind binary not found" >&2
+exit 127
