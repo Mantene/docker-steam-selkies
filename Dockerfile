@@ -63,6 +63,7 @@ COPY /root /
 
 RUN chmod +x \
   /usr/local/bin/elogind-wrapper \
+  /usr/local/bin/org.freedesktop.login1 \
   /usr/local/bin/selkies-smoke-test \
   /usr/local/bin/steam-selkies \
   /etc/cont-init.d/45-selkies-wayland-socket-index.sh \

@@ -30,3 +30,4 @@ fix_autostart() {
 
 fix_autostart /config/.config/openbox/autostart
 fix_autostart /config/.config/wayfire/autostart
+fix_autostart /config/.config/labwc/autostart
