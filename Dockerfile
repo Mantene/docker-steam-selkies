@@ -43,6 +43,22 @@ RUN \
     wget \
     va-driver-all \
     steam-installer && \
+  echo "**** ensure elogind daemon path ****" && \
+  ELOGIND_DAEMON="" && \
+  for p in \
+    /usr/lib/elogind/elogind \
+    /lib/elogind/elogind \
+    /usr/libexec/elogind/elogind \
+    /libexec/elogind/elogind; do \
+    if [ -x "${p}" ]; then ELOGIND_DAEMON="${p}"; break; fi; \
+  done && \
+  if [ -z "${ELOGIND_DAEMON}" ]; then \
+    echo "ERROR: elogind daemon binary not found after install" >&2; \
+    dpkg -L elogind || true; \
+    exit 1; \
+  fi && \
+  mkdir -p /usr/lib/elogind && \
+  ln -sf "${ELOGIND_DAEMON}" /usr/lib/elogind/elogind && \
   ln -sf /usr/games/steam /usr/bin/steam && \
   echo "**** install Sunshine ****" && \
   SUNSHINE_RELEASE=$(curl -sX GET "https://api.github.com/repos/LizardByte/Sunshine/releases/latest" | jq -r '.tag_name') && \
