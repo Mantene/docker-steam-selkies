@@ -5,6 +5,17 @@ STEAM_LAUNCHER=/usr/bin/steam
 STEAMCONFIG="${HOME}/.steam"
 STEAMDIR="${HOME}/.steam/debian-installation"
 
+# Under Wayland+Xwayland, DISPLAY can sometimes be set to a non-existent screen
+# (e.g. :1) even though Xwayland is actually running on :0.
+if [ -n "${DISPLAY-}" ]; then
+  dnum="${DISPLAY#:}"
+  if [ -n "${dnum}" ] && [ ! -S "/tmp/.X11-unix/X${dnum}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+    DISPLAY=:0
+    export DISPLAY
+    echo "steam-selkies: overriding DISPLAY to :0" >>/config/steam-selkies.log 2>&1 || true
+  fi
+fi
+
 mkdir -p "${STEAMCONFIG}" "${STEAMDIR}"
 
 if ! [ -d "${STEAMCONFIG}/steam" ]; then

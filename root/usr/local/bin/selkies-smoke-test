@@ -27,6 +27,15 @@ if [ -z "${DISPLAY-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
   echo "steam-selkies: inferred DISPLAY=${DISPLAY} from /tmp/.X11-unix/X0" >>"${log_file}" 2>&1
 fi
 
+# If DISPLAY is set but doesn't correspond to a live X socket, prefer X0.
+if [ -n "${DISPLAY-}" ]; then
+  dnum="${DISPLAY#:}"
+  if [ -n "${dnum}" ] && [ ! -S "/tmp/.X11-unix/X${dnum}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+    echo "steam-selkies: DISPLAY=${DISPLAY} has no /tmp/.X11-unix/X${dnum}; overriding to :0" >>"${log_file}" 2>&1
+    export DISPLAY=:0
+  fi
+fi
+
 # If DISPLAY is still missing, try to infer from the Xwayland command line.
 if [ -z "${DISPLAY-}" ] && pgrep -x Xwayland >/dev/null 2>&1; then
   xw_display="$(pgrep -a Xwayland | awk '{for(i=1;i<=NF;i++) if ($i ~ /^:[0-9]+$/) {print $i; exit}}')"
@@ -47,7 +56,7 @@ if command -v xterm >/dev/null 2>&1; then
   (
     echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-})";
     if [ -n "${launch_as_user}" ]; then
-      su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' xterm -title 'Selkies Smoke Test' -geometry 90x24 -e bash -lc 'echo \"Selkies smoke test: if you can see this window, capture+streaming is working.\"; echo; echo \"Close this window when done.\"; exec bash'";
+        su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' WAYLAND_DISPLAY='${WAYLAND_DISPLAY-}' xterm -title 'Selkies Smoke Test' -geometry 90x24 -e bash -lc 'echo \"Selkies smoke test: if you can see this window, capture+streaming is working.\"; echo; echo \"Close this window when done.\"; exec bash'";
       echo "steam-selkies: xterm (as ${launch_as_user}) exited rc=$?";
     else
       xterm -title "Selkies Smoke Test" -geometry 90x24 -e bash -lc 'echo "Selkies smoke test: if you can see this window, capture+streaming is working."; echo; echo "Close this window when done."; exec bash'
