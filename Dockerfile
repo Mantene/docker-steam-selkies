@@ -90,6 +90,7 @@ RUN chmod +x \
   /usr/local/bin/org.freedesktop.login1 \
   /usr/local/bin/selkies-smoke-test \
   /usr/local/bin/steam-selkies \
+  /etc/cont-init.d/11-dbus-servicehelper-hardening.sh \
   /etc/cont-init.d/44-start-elogind.sh \
   /etc/cont-init.d/45-selkies-wayland-socket-index.sh \
   /etc/cont-init.d/46-dbus-login1-override.sh \
