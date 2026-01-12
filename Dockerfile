@@ -40,6 +40,7 @@ RUN \
     jq \
     kmod \
     xterm \
+    xwayland \
     wget \
     va-driver-all \
     steam-installer && \

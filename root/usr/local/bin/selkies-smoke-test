@@ -10,15 +10,30 @@ log_file=/config/steam-selkies.log
 (
   echo "steam-selkies: smoke test enabled (STEAM_DEBUG_SMOKE_TEST=true)"
   echo "steam-selkies: attempting to launch xterm to verify compositor+stream"
+  echo "steam-selkies: env WAYLAND_DISPLAY=${WAYLAND_DISPLAY-} DISPLAY=${DISPLAY-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR-}"
 ) >>"${log_file}" 2>&1
 
 # Give the compositor/XWayland a moment to come up.
-sleep 1
+for _ in $(seq 1 10); do
+  if [ -n "${DISPLAY-}" ] || [ -S /tmp/.X11-unix/X0 ] || pgrep -x Xwayland >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+# If DISPLAY is missing but X0 exists, infer DISPLAY=:0.
+if [ -z "${DISPLAY-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+  export DISPLAY=:0
+  echo "steam-selkies: inferred DISPLAY=${DISPLAY} from /tmp/.X11-unix/X0" >>"${log_file}" 2>&1
+fi
 
 if command -v xterm >/dev/null 2>&1; then
   # Run in background; keep it visible without stealing focus too aggressively.
-  (xterm -title "Selkies Smoke Test" -geometry 90x24 -e bash -lc 'echo "Selkies smoke test: if you can see this window, capture+streaming is working."; echo; echo "Close this window when done."; exec bash') \
-    >>"${log_file}" 2>&1 &
+  (
+    echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-})";
+    xterm -title "Selkies Smoke Test" -geometry 90x24 -e bash -lc 'echo "Selkies smoke test: if you can see this window, capture+streaming is working."; echo; echo "Close this window when done."; exec bash'
+    echo "steam-selkies: xterm exited rc=$?";
+  ) >>"${log_file}" 2>&1 &
   exit 0
 fi
 
