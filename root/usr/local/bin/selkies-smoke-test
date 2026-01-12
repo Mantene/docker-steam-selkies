@@ -27,12 +27,32 @@ if [ -z "${DISPLAY-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
   echo "steam-selkies: inferred DISPLAY=${DISPLAY} from /tmp/.X11-unix/X0" >>"${log_file}" 2>&1
 fi
 
+# If DISPLAY is still missing, try to infer from the Xwayland command line.
+if [ -z "${DISPLAY-}" ] && pgrep -x Xwayland >/dev/null 2>&1; then
+  xw_display="$(pgrep -a Xwayland | awk '{for(i=1;i<=NF;i++) if ($i ~ /^:[0-9]+$/) {print $i; exit}}')"
+  if [ -n "${xw_display}" ]; then
+    export DISPLAY="${xw_display}"
+    echo "steam-selkies: inferred DISPLAY=${DISPLAY} from Xwayland process" >>"${log_file}" 2>&1
+  fi
+fi
+
 if command -v xterm >/dev/null 2>&1; then
+  # Prefer launching GUI apps as the non-root user used by linuxserver base images.
+  launch_as_user=""
+  if command -v su >/dev/null 2>&1 && id abc >/dev/null 2>&1; then
+    launch_as_user="abc"
+  fi
+
   # Run in background; keep it visible without stealing focus too aggressively.
   (
     echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-})";
-    xterm -title "Selkies Smoke Test" -geometry 90x24 -e bash -lc 'echo "Selkies smoke test: if you can see this window, capture+streaming is working."; echo; echo "Close this window when done."; exec bash'
-    echo "steam-selkies: xterm exited rc=$?";
+    if [ -n "${launch_as_user}" ]; then
+      su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' xterm -title 'Selkies Smoke Test' -geometry 90x24 -e bash -lc 'echo \"Selkies smoke test: if you can see this window, capture+streaming is working.\"; echo; echo \"Close this window when done.\"; exec bash'";
+      echo "steam-selkies: xterm (as ${launch_as_user}) exited rc=$?";
+    else
+      xterm -title "Selkies Smoke Test" -geometry 90x24 -e bash -lc 'echo "Selkies smoke test: if you can see this window, capture+streaming is working."; echo; echo "Close this window when done."; exec bash'
+      echo "steam-selkies: xterm exited rc=$?";
+    fi
   ) >>"${log_file}" 2>&1 &
   exit 0
 fi

@@ -44,6 +44,7 @@ RUN \
     wget \
     va-driver-all \
     steam-installer && \
+  if [ -f /usr/bin/xterm ]; then chmod u-s /usr/bin/xterm || true; fi && \
   echo "**** ensure elogind daemon path ****" && \
   ELOGIND_DAEMON="" && \
   if dpkg -L elogind >/dev/null 2>&1; then \
