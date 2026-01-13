@@ -19,6 +19,29 @@ ensure_log_writable() {
   fi
 }
 
+abc_env_args() {
+  # Build a stable set of env vars so user-switch tools can't silently reset HOME/auth paths.
+  # Intentionally do not include WAYLAND_DISPLAY here; it may be unset for Plasma X11.
+  local home="${HOME:-/config}"
+  local runtime="${XDG_RUNTIME_DIR:-/config/.XDG}"
+  local tmp="${TMPDIR:-/config/tmp}"
+  local xauth="${XAUTHORITY:-${home}/.Xauthority}"
+  local iceauth="${ICEAUTHORITY:-${home}/.ICEauthority}"
+
+  ABC_ENV=(
+    env
+    "HOME=${home}"
+    "USER=abc"
+    "LOGNAME=abc"
+    "XDG_RUNTIME_DIR=${runtime}"
+    "DISPLAY=${DISPLAY:-}"
+    "XAUTHORITY=${xauth}"
+    "ICEAUTHORITY=${iceauth}"
+    "TMPDIR=${tmp}"
+    "PATH=${PATH}"
+  )
+}
+
 run_as_abc() {
   if [ "$(id -u)" -ne 0 ] || ! id abc >/dev/null 2>&1; then
     "$@"
@@ -26,16 +49,19 @@ run_as_abc() {
   fi
 
   if command -v s6-setuidgid >/dev/null 2>&1; then
-    s6-setuidgid abc "$@"
+    abc_env_args
+    s6-setuidgid abc "${ABC_ENV[@]}" "$@"
     return $?
   fi
   if command -v runuser >/dev/null 2>&1; then
-    runuser -u abc --preserve-environment -- "$@"
+    abc_env_args
+    runuser -u abc --preserve-environment -- "${ABC_ENV[@]}" "$@"
     return $?
   fi
 
   # Fallback
-  su -m -s /bin/bash abc -c "$(printf '%q ' "$@")"
+  abc_env_args
+  su -m -s /bin/bash abc -c "$(printf '%q ' "${ABC_ENV[@]}" "$@")"
 }
 
 exec_as_abc() {
@@ -44,13 +70,16 @@ exec_as_abc() {
   fi
 
   if command -v s6-setuidgid >/dev/null 2>&1; then
-    exec s6-setuidgid abc "$@"
+    abc_env_args
+    exec s6-setuidgid abc "${ABC_ENV[@]}" "$@"
   fi
   if command -v runuser >/dev/null 2>&1; then
-    exec runuser -u abc --preserve-environment -- "$@"
+    abc_env_args
+    exec runuser -u abc --preserve-environment -- "${ABC_ENV[@]}" "$@"
   fi
 
-  exec su -m -s /bin/bash abc -c "$(printf '%q ' "$@")"
+  abc_env_args
+  exec su -m -s /bin/bash abc -c "$(printf '%q ' "${ABC_ENV[@]}" "$@")"
 }
 
 can_write() {
@@ -250,6 +279,7 @@ if [ -z "${display_num}" ] || [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
 fi
 
 log "Launching startplasma-x11 on ${DISPLAY}; logs -> ${kde_log}"
+log "Plasma env: HOME=${HOME} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY} XAUTHORITY=${XAUTHORITY} ICEAUTHORITY=${ICEAUTHORITY} TMPDIR=${TMPDIR}"
 
 # Ensure Plasma actually behaves as an X11 session.
 # We only needed WAYLAND_DISPLAY to start rootless Xwayland; keeping it set can
