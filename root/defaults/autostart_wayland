@@ -1,3 +1,15 @@
+# Ensure Steam autostarts in KDE
+mkdir -p "$HOME/.config/autostart"
+cat > "$HOME/.config/autostart/steam.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Exec=steam
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Steam
+Comment=Start Steam client
+EOF
 #!/bin/bash
 
 # Start Sunshine (GameStream server) in the background.
@@ -12,12 +24,9 @@ if command -v selkies-smoke-test >/dev/null 2>&1; then
   selkies-smoke-test
 fi
 
-# Steam will run via XWayland in the Wayland session.
-if command -v unshare >/dev/null 2>&1; then
-  if ! unshare -Ur true >/dev/null 2>&1; then
-    echo "steam-selkies: warning: user namespaces appear unavailable; Steam may exit with 'Steam now requires user namespaces'." >>/config/steam-selkies.log
-  fi
-  steam-selkies
+# Launch KDE Plasma (Wayland session)
+if command -v startplasma-wayland >/dev/null 2>&1; then
+  startplasma-wayland
 else
-  steam-selkies
+  echo "KDE Plasma (startplasma-wayland) not found!"
 fi

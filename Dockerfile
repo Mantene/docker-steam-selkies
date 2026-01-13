@@ -30,7 +30,7 @@ RUN \
   elif [ -f /etc/apt/sources.list ]; then \
     sed -i 's/ main$/ main contrib non-free non-free-firmware/' /etc/apt/sources.list || true; \
   fi && \
-  echo "**** install Steam + Sunshine prereqs ****" && \
+  echo "**** install Steam + KDE Plasma + Sunshine prereqs ****" && \
   dpkg --add-architecture i386 && \
   apt-get update && \
   apt-get install -y --no-install-recommends \
@@ -43,7 +43,18 @@ RUN \
     xwayland \
     wget \
     va-driver-all \
-    steam-installer && \
+    steam-installer \
+    plasma-desktop \
+    sddm \
+    kde-plasma-desktop \
+    konsole \
+    dolphin \
+    kwin-x11 \
+    kde-config-gtk-style \
+    kde-cli-tools \
+    kde-spectacle \
+    xinit \
+    dbus-x11 && \
   if [ -f /usr/bin/xterm ]; then chmod u-s /usr/bin/xterm || true; fi && \
   echo "**** ensure elogind daemon path ****" && \
   ELOGIND_DAEMON="" && \
