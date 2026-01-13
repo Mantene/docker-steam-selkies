@@ -32,7 +32,8 @@ log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${
 log "Env: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY:-}"
 ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
 
-# X11 socket dirs (needed for Xwayland/KWin X11)
+# X11/ICE socket dirs (Xwayland + session manager need these)
+# Note: these directories are ideally owned by root; a cont-init script enforces that.
 mkdir -p /tmp/.X11-unix /tmp/.ICE-unix || true
 chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
 
@@ -88,12 +89,27 @@ fi
 display_num=${SELKIES_XWAYLAND_DISPLAY_NUM:-1}
 export DISPLAY=":${display_num}"
 
+# Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
+export XAUTHORITY="${XDG_RUNTIME_DIR}/Xauthority"
+export ICEAUTHORITY="${XDG_RUNTIME_DIR}/ICEauthority"
+rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
+touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
+chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
+
+# Force an X11 window manager. Plasma can otherwise try kwin_wayland_wrapper --xwayland,
+# which still requires DRM/KMS and fails in many container setups.
+if command -v kwin_x11 >/dev/null 2>&1; then
+  KDEWM_BIN="$(command -v kwin_x11)"
+  export KDEWM="${KDEWM_BIN}"
+  log "Set KDEWM=${KDEWM}"
+fi
+
 if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
   log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
   # Rootless Xwayland on top of the existing Wayland compositor.
   # -terminate: exit when last client disconnects
   # -noreset: keep server alive across client restarts
-  Xwayland "${DISPLAY}" -rootless -terminate -noreset -nolisten tcp >/config/xwayland.log 2>&1 &
+  Xwayland "${DISPLAY}" -rootless -terminate -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
 
   i=0
   while [ $i -lt 10 ]; do
@@ -111,6 +127,15 @@ if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
 fi
 
 log "Launching startplasma-x11 on ${DISPLAY}; logs -> ${kde_log}"
+
+# Ensure Plasma actually behaves as an X11 session.
+# We only needed WAYLAND_DISPLAY to start rootless Xwayland; keeping it set can
+# cause some components to pick Wayland backends and try kwin_wayland_wrapper.
+unset WAYLAND_DISPLAY
+export XDG_SESSION_TYPE=x11
+export QT_QPA_PLATFORM=xcb
+export GDK_BACKEND=x11
+export CLUTTER_BACKEND=x11
 
 if command -v dbus-run-session >/dev/null 2>&1; then
   exec dbus-run-session -- startplasma-x11 >>"${kde_log}" 2>&1
