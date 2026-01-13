@@ -22,6 +22,20 @@ helper_candidates=(
 	/lib/x86_64-linux-gnu/dbus-1.0/dbus-daemon-launch-helper
 )
 
+# Discover additional helpers from package metadata (best-effort).
+if command -v dpkg-query >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; then
+	if dpkg-query -W -f='${Status}' dbus 2>/dev/null | grep -q "installed"; then
+		while IFS= read -r p; do
+			[ -n "${p}" ] || continue
+			case "${p}" in
+				*/dbus-daemon-launch-helper)
+					helper_candidates+=("${p}")
+					;;
+			esac
+		done < <(dpkg -L dbus 2>/dev/null || true)
+	fi
+fi
+
 if ! command -v getent >/dev/null 2>&1; then
 	exit 0
 fi
@@ -51,7 +65,11 @@ for helper in "${helper_candidates[@]}"; do
 		log "Before: $(stat -c '%a %A %U:%G %n' "${helper_dir}" "${helper}" 2>/dev/null | tr '\n' '|' || true)"
 
 		# Harden the path (best-effort; log if read-only).
-		for d in /usr /usr/lib /usr/lib/dbus-1.0 /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu/dbus-1.0; do
+		for d in / /usr /lib /usr/lib \
+			/usr/lib/dbus-1.0 /lib/dbus-1.0 \
+			/usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu \
+			/usr/lib/x86_64-linux-gnu/dbus-1.0 /lib/x86_64-linux-gnu/dbus-1.0 \
+			"${helper_dir}"; do
 			if [ -d "${d}" ]; then
 				chown root:root "${d}" 2>/dev/null || true
 				chmod go-w "${d}" 2>/dev/null || true

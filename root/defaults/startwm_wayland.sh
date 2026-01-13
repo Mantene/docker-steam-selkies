@@ -252,6 +252,18 @@ if [ -z "${display_num}" ]; then
       log "WARNING: xauth not found; X11 authentication may fail (install xauth)"
     fi
 
+    # Seed ICEauthority as well; ksmserver uses ICE for session management.
+    if command -v iceauth >/dev/null 2>&1; then
+      ice_cookie="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || echo "" )"
+      if [ -n "${ice_cookie}" ]; then
+        # Try a couple of common network-id spellings.
+        for netid in "unix${DISPLAY}" "unix/${DISPLAY}" "${DISPLAY}"; do
+          iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1 || true
+          iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${ice_cookie}" >/dev/null 2>&1 || true
+        done
+      fi
+    fi
+
     log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
     run_as_abc Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
     xwpid=$!
