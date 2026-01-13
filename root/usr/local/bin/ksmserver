@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log() {
+  echo "[steam-selkies][wrap:ksmserver] $*" >>/config/steam-selkies.log 2>/dev/null || true
+}
+
+log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} ICEAUTHORITY=${ICEAUTHORITY:-} XAUTHORITY=${XAUTHORITY:-}"
+
+if [ -n "${ICEAUTHORITY:-}" ]; then
+  if [ -e "${ICEAUTHORITY}" ]; then
+    log "ICEAUTHORITY exists: $(ls -l "${ICEAUTHORITY}" 2>/dev/null || true)"
+  else
+    log "ICEAUTHORITY missing: ${ICEAUTHORITY}"
+  fi
+fi
+
+exec /usr/bin/ksmserver "$@"

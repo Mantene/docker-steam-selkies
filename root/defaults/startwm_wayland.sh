@@ -94,6 +94,9 @@ export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=KDE
 export KDE_FULL_SESSION=true
 
+# Ensure our debug/compat wrappers (e.g., /usr/local/bin/xrdb) are preferred.
+export PATH="/usr/local/bin:${PATH}"
+
 ensure_log_writable
 
 # Selkies conventions: compositor socket is typically wayland-1
@@ -223,6 +226,11 @@ if command -v kwin_x11 >/dev/null 2>&1; then
   log "Set KDEWM=${KDEWM}"
 fi
 
+# Plasma 6 defaults to systemd --user integration. In containers without systemd,
+# this causes repeated org.freedesktop.systemd1 activation failures and can break
+# session startup. Force the non-systemd path.
+export PLASMA_USE_SYSTEMD=0
+
 # If the base compositor already started Xwayland, reuse it.
 for n in 0 1 2 3 4 5 6 7 8 9; do
   if [ -S "/tmp/.X11-unix/X${n}" ]; then
@@ -257,7 +265,14 @@ if [ -z "${display_num}" ]; then
       ice_cookie="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || echo "" )"
       if [ -n "${ice_cookie}" ]; then
         # Try a couple of common network-id spellings.
-        for netid in "unix${DISPLAY}" "unix/${DISPLAY}" "${DISPLAY}"; do
+        for netid in \
+          "${DISPLAY}" \
+          "unix${DISPLAY}" \
+          "unix/${DISPLAY}" \
+          "local${DISPLAY}" \
+          "local/${DISPLAY}" \
+          "local/unix${DISPLAY}" \
+          "local/unix/${DISPLAY}"; do
           iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1 || true
           iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${ice_cookie}" >/dev/null 2>&1 || true
         done
@@ -265,7 +280,8 @@ if [ -z "${display_num}" ]; then
     fi
 
     log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
-    run_as_abc Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
+    # -ac disables access control; inside a container this avoids brittle Xauthority issues.
+    run_as_abc Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -ac -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
     xwpid=$!
 
     i=0
@@ -298,8 +314,42 @@ if [ -z "${display_num}" ] || [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
   exit 1
 fi
 
+# Wait until the X server is accepting connections (prevents kcminit/xrdb race).
+if command -v xdpyinfo >/dev/null 2>&1; then
+  i=0
+  while [ $i -lt 30 ]; do
+    if run_as_abc xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  if [ $i -ge 30 ]; then
+    log "WARNING: X did not become ready within 30s; continuing anyway"
+  fi
+fi
+
 log "Launching startplasma-x11 on ${DISPLAY}; logs -> ${kde_log}"
 log "Plasma env: HOME=${HOME} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY} XAUTHORITY=${XAUTHORITY} ICEAUTHORITY=${ICEAUTHORITY} TMPDIR=${TMPDIR}"
+
+# Preflight diagnostics for the two remaining persistent failures (xrdb + ICEAuthority).
+if command -v xrdb >/dev/null 2>&1; then
+  if ! run_as_abc xrdb -version >/dev/null 2>&1; then
+    log "WARNING: xrdb is not executable for abc; capturing diagnostics"
+    ls -l /usr/bin/xrdb 2>/dev/null | while IFS= read -r line; do log "xrdb: ${line}"; done || true
+    run_as_abc ls -l /usr/bin/xrdb 2>/dev/null | while IFS= read -r line; do log "xrdb(abc): ${line}"; done || true
+    mount 2>/dev/null | grep -E ' on (/usr|/config|/tmp) ' | while IFS= read -r line; do log "mount: ${line}"; done || true
+    if [ -r /proc/self/attr/current ]; then
+      log "lsm: $(cat /proc/self/attr/current 2>/dev/null || true)"
+    fi
+  fi
+fi
+
+if command -v iceauth >/dev/null 2>&1; then
+  if ! run_as_abc iceauth -f "${ICEAUTHORITY}" list >/dev/null 2>&1; then
+    log "WARNING: iceauth cannot read ICEAUTHORITY as abc"
+  fi
+fi
 
 # Ensure Plasma actually behaves as an X11 session.
 # We only needed WAYLAND_DISPLAY to start rootless Xwayland; keeping it set can

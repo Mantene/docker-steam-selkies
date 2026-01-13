@@ -113,6 +113,8 @@ COPY root/etc/cont-init.d/ /custom-cont-init.d/
 
 # set permissions
 RUN chmod +x \
+  /usr/local/bin/ksmserver \
+  /usr/local/bin/xrdb \
   /usr/local/bin/elogind-wrapper \
   /usr/local/bin/kwin_x11_replace \
   /usr/local/bin/org.freedesktop.login1 \

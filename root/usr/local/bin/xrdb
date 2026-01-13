@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log() {
+  echo "[steam-selkies][wrap:xrdb] $*" >>/config/steam-selkies.log 2>/dev/null || true
+}
+
+log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} XAUTHORITY=${XAUTHORITY:-}"
+log "args: $*"
+
+# If called with a file argument, log whether it exists (helps debug kcminit temp races).
+for a in "$@"; do
+  case "$a" in
+    /config/tmp/*|/*)
+      if [ -e "$a" ]; then
+        log "arg-file: exists ${a} -> $(ls -l "$a" 2>/dev/null || true)"
+      else
+        log "arg-file: missing ${a}"
+      fi
+      ;;
+  esac
+done
+
+exec /usr/bin/xrdb "$@"
