@@ -15,7 +15,12 @@ log() {
 	echo "[steam-selkies][dbus-helper] $*" >>/config/steam-selkies.log 2>/dev/null || true
 }
 
-helper=/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+helper_candidates=(
+	/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+	/usr/lib/x86_64-linux-gnu/dbus-1.0/dbus-daemon-launch-helper
+	/lib/dbus-1.0/dbus-daemon-launch-helper
+	/lib/x86_64-linux-gnu/dbus-1.0/dbus-daemon-launch-helper
+)
 
 if ! command -v getent >/dev/null 2>&1; then
 	exit 0
@@ -37,23 +42,29 @@ if id abc >/dev/null 2>&1; then
 	fi
 fi
 
-if [ ! -e "${helper}" ]; then
-	log "WARNING: ${helper} not found; activation may fail"
-	exit 0
-fi
+found_any=false
+for helper in "${helper_candidates[@]}"; do
+	if [ -e "${helper}" ]; then
+		found_any=true
+		log "Before: $(stat -c '%a %A %U:%G %n' /usr /usr/lib /usr/lib/dbus-1.0 "${helper}" 2>/dev/null | tr '\n' '|' || true)"
 
-log "Before: $(stat -c '%a %A %U:%G %n' /usr /usr/lib /usr/lib/dbus-1.0 "${helper}" 2>/dev/null | tr '\n' '|' || true)"
+		# Harden the path (best-effort; log if read-only).
+		for d in /usr /usr/lib /usr/lib/dbus-1.0 /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu/dbus-1.0; do
+			if [ -d "${d}" ]; then
+				chown root:root "${d}" 2>/dev/null || true
+				chmod go-w "${d}" 2>/dev/null || true
+			fi
+		done
 
-# Harden the path (best-effort; log if read-only).
-for d in /usr /usr/lib /usr/lib/dbus-1.0; do
-	if [ -d "${d}" ]; then
-		chown root:root "${d}" 2>/dev/null || true
-		chmod go-w "${d}" 2>/dev/null || true
+		# Enforce helper ownership/mode.
+		chown root:messagebus "${helper}" 2>/dev/null || true
+		chmod 4754 "${helper}" 2>/dev/null || true
+
+		log "After:  $(stat -c '%a %A %U:%G %n' /usr /usr/lib /usr/lib/dbus-1.0 "${helper}" 2>/dev/null | tr '\n' '|' || true)"
 	fi
 done
 
-# Enforce helper ownership/mode.
-chown root:messagebus "${helper}" 2>/dev/null || true
-chmod 4750 "${helper}" 2>/dev/null || true
-
-log "After:  $(stat -c '%a %A %U:%G %n' /usr /usr/lib /usr/lib/dbus-1.0 "${helper}" 2>/dev/null | tr '\n' '|' || true)"
+if [ "${found_any}" = false ]; then
+	log "WARNING: dbus-daemon-launch-helper not found in common paths; activation may fail"
+	exit 0
+fi

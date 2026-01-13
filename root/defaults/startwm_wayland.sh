@@ -7,7 +7,9 @@ set -euo pipefail
 # DRM/KMS access requirements; instead we run Plasma X11 on Xwayland.
 
 log() {
-  echo "[steam-selkies][startwm_wayland] $*" | tee -a /config/steam-selkies.log >/dev/null 2>&1 || true
+  # Log both to stdout (container logs) and to the persisted /config log.
+  echo "[steam-selkies][startwm_wayland] $*" || true
+  echo "[steam-selkies][startwm_wayland] $*" >>/config/steam-selkies.log 2>/dev/null || true
 }
 
 ensure_log_writable() {
@@ -116,6 +118,12 @@ ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= rea
 export TMPDIR="${TMPDIR:-/config/tmp}"
 mkdir -p "${TMPDIR}" >/dev/null 2>&1 || true
 chmod 1777 "${TMPDIR}" >/dev/null 2>&1 || true
+
+if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
+  # Prefer a simple per-user tmp directory to avoid cross-UID temp file issues.
+  chown abc:users "${TMPDIR}" >/dev/null 2>&1 || true
+  chmod 700 "${TMPDIR}" >/dev/null 2>&1 || true
+fi
 
 # X11/ICE socket dirs: Xwayland and KDE session pieces behave best when these
 # are root-owned 1777. Try to enforce that (root via sudo if available).
