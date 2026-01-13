@@ -100,7 +100,9 @@ RUN \
 
 # add local files
 COPY root/ /root/
-
+COPY root/usr/local/bin/ /usr/local/bin/
+COPY root/etc/cont-init.d/ /etc/cont-init.d/
+# set permissions
 RUN chmod +x \
   /usr/local/bin/elogind-wrapper \
   /usr/local/bin/org.freedesktop.login1 \
