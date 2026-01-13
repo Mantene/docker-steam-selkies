@@ -40,7 +40,7 @@ RUN \
     jq \
     kmod \
     xauth \
-    iceauth \
+    x11-utils \
     x11-xserver-utils \
     xterm \
     xwayland \

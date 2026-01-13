@@ -46,7 +46,9 @@ found_any=false
 for helper in "${helper_candidates[@]}"; do
 	if [ -e "${helper}" ]; then
 		found_any=true
-		log "Before: $(stat -c '%a %A %U:%G %n' /usr /usr/lib /usr/lib/dbus-1.0 "${helper}" 2>/dev/null | tr '\n' '|' || true)"
+		helper_dir="$(dirname "${helper}")"
+		log "Helper: ${helper}"
+		log "Before: $(stat -c '%a %A %U:%G %n' "${helper_dir}" "${helper}" 2>/dev/null | tr '\n' '|' || true)"
 
 		# Harden the path (best-effort; log if read-only).
 		for d in /usr /usr/lib /usr/lib/dbus-1.0 /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu/dbus-1.0; do
@@ -60,7 +62,7 @@ for helper in "${helper_candidates[@]}"; do
 		chown root:messagebus "${helper}" 2>/dev/null || true
 		chmod 4754 "${helper}" 2>/dev/null || true
 
-		log "After:  $(stat -c '%a %A %U:%G %n' /usr /usr/lib /usr/lib/dbus-1.0 "${helper}" 2>/dev/null | tr '\n' '|' || true)"
+		log "After:  $(stat -c '%a %A %U:%G %n' "${helper_dir}" "${helper}" 2>/dev/null | tr '\n' '|' || true)"
 	fi
 done
 
