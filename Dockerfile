@@ -39,6 +39,7 @@ RUN \
     elogind \
     jq \
     kmod \
+    xauth \
     xterm \
     xwayland \
     wget \

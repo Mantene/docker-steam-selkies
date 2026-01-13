@@ -6,7 +6,7 @@ set -euo pipefail
 # In these images, the system bus may run as user 'abc'. D-Bus uses the setuid helper
 # /usr/lib/dbus-1.0/dbus-daemon-launch-helper for service activation. dbus-daemon
 # refuses to use the helper unless:
-# - helper is root:messagebus and mode 4754 (matches Debian packaging)
+# - helper is root:messagebus and mode 4750/4754 depending on distro/dbus build
 # - the path to the helper is not writable by group/other (trusted path)
 # - the bus user can execute it (usually by being in messagebus group)
 
@@ -54,6 +54,6 @@ done
 
 # Enforce helper ownership/mode.
 chown root:messagebus "${helper}" 2>/dev/null || true
-chmod 4754 "${helper}" 2>/dev/null || true
+chmod 4750 "${helper}" 2>/dev/null || true
 
 log "After:  $(stat -c '%a %A %U:%G %n' /usr /usr/lib /usr/lib/dbus-1.0 "${helper}" 2>/dev/null | tr '\n' '|' || true)"

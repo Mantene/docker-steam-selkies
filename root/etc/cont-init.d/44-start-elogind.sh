@@ -28,12 +28,13 @@ fi
 
 for p in \
 	/usr/lib/elogind/elogind \
+	/usr/lib/elogind/elogind/elogind \
 	/lib/elogind/elogind \
 	/usr/libexec/elogind/elogind \
 	/libexec/elogind/elogind \
 	/usr/sbin/elogind \
 	/usr/bin/elogind; do
-	if [ -x "${p}" ]; then
+	if [ -x "${p}" ] && [ ! -d "${p}" ]; then
 		echo "[steam-selkies] Starting elogind via ${p}"
 		"${p}" &
 		exit 0

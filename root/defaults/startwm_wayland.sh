@@ -10,6 +10,49 @@ log() {
   echo "[steam-selkies][startwm_wayland] $*" | tee -a /config/steam-selkies.log >/dev/null 2>&1 || true
 }
 
+ensure_log_writable() {
+  mkdir -p /config >/dev/null 2>&1 || true
+  touch /config/steam-selkies.log >/dev/null 2>&1 || true
+  if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
+    chown abc:users /config/steam-selkies.log >/dev/null 2>&1 || true
+    chmod 664 /config/steam-selkies.log >/dev/null 2>&1 || true
+  fi
+}
+
+run_as_abc() {
+  if [ "$(id -u)" -ne 0 ] || ! id abc >/dev/null 2>&1; then
+    "$@"
+    return $?
+  fi
+
+  if command -v s6-setuidgid >/dev/null 2>&1; then
+    s6-setuidgid abc "$@"
+    return $?
+  fi
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u abc -- "$@"
+    return $?
+  fi
+
+  # Fallback
+  su -s /bin/bash abc -c "$(printf '%q ' "$@")"
+}
+
+exec_as_abc() {
+  if [ "$(id -u)" -ne 0 ] || ! id abc >/dev/null 2>&1; then
+    exec "$@"
+  fi
+
+  if command -v s6-setuidgid >/dev/null 2>&1; then
+    exec s6-setuidgid abc "$@"
+  fi
+  if command -v runuser >/dev/null 2>&1; then
+    exec runuser -u abc -- "$@"
+  fi
+
+  exec su -s /bin/bash abc -c "$(printf '%q ' "$@")"
+}
+
 can_write() {
   local p="$1"
   ( : >>"$p" ) >/dev/null 2>&1
@@ -20,6 +63,8 @@ export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=KDE
 export KDE_FULL_SESSION=true
 
+ensure_log_writable
+
 # Selkies conventions: compositor socket is typically wayland-1
 export WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1}
 
@@ -28,6 +73,7 @@ export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/config/.XDG}
 mkdir -p "${XDG_RUNTIME_DIR}" || true
 chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
 
+export HOME="${HOME:-/config}"
 log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${HOME:-}"
 log "Env: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY:-}"
 ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
@@ -72,7 +118,6 @@ if command -v sunshine >/dev/null 2>&1; then
 fi
 
 # Ensure Steam autostarts once Plasma is up
-HOME="${HOME:-/config}"
 
 set +e
 mkdir -p "$HOME/.config/autostart" >/dev/null 2>&1
@@ -122,6 +167,10 @@ rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 
+if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
+  chown abc:users "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
+fi
+
 # Force an X11 window manager. Plasma can otherwise try kwin_wayland_wrapper --xwayland,
 # which still requires DRM/KMS and fails in many container setups.
 if command -v kwin_x11 >/dev/null 2>&1; then
@@ -146,8 +195,21 @@ if [ -z "${display_num}" ]; then
     fi
     display_num="$n"
     export DISPLAY=":${display_num}"
+
+    # Populate the Xauthority file with a cookie before starting Xwayland.
+    if command -v xauth >/dev/null 2>&1; then
+      cookie="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || (dd if=/dev/urandom bs=16 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n') )"
+      if [ -n "${cookie}" ]; then
+        xauth -f "${XAUTHORITY}" remove "${DISPLAY}" >/dev/null 2>&1 || true
+        xauth -f "${XAUTHORITY}" add "${DISPLAY}" MIT-MAGIC-COOKIE-1 "${cookie}" >/dev/null 2>&1 || true
+        xauth -f "${XAUTHORITY}" add "unix${DISPLAY}" MIT-MAGIC-COOKIE-1 "${cookie}" >/dev/null 2>&1 || true
+      fi
+    else
+      log "WARNING: xauth not found; X11 authentication may fail (install xauth)"
+    fi
+
     log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
-    Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
+    run_as_abc Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
     xwpid=$!
 
     i=0
@@ -192,13 +254,12 @@ export GDK_BACKEND=x11
 export CLUTTER_BACKEND=x11
 
 if command -v dbus-run-session >/dev/null 2>&1; then
-  exec dbus-run-session -- startplasma-x11 >>"${kde_log}" 2>&1
+  exec_as_abc dbus-run-session -- startplasma-x11 >>"${kde_log}" 2>&1
 fi
 
 if command -v dbus-launch >/dev/null 2>&1; then
-  eval "$(dbus-launch --sh-syntax)"
-  export DBUS_SESSION_BUS_ADDRESS
-  exec startplasma-x11 >>"${kde_log}" 2>&1
+  # Keep fallback compatible with either root or abc execution.
+  exec_as_abc bash -lc 'eval "$(dbus-launch --sh-syntax)"; export DBUS_SESSION_BUS_ADDRESS; exec startplasma-x11' >>"${kde_log}" 2>&1
 fi
 
-exec startplasma-x11 >>"${kde_log}" 2>&1
+exec_as_abc startplasma-x11 >>"${kde_log}" 2>&1
