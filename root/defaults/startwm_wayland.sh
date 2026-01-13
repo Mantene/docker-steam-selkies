@@ -32,10 +32,17 @@ log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${
 log "Env: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY:-}"
 ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
 
-# X11/ICE socket dirs (Xwayland + session manager need these)
-# Note: these directories are ideally owned by root; a cont-init script enforces that.
-mkdir -p /tmp/.X11-unix /tmp/.ICE-unix || true
-chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+# X11/ICE socket dirs must be root-owned (cont-init enforces that).
+if [ ! -d /tmp/.X11-unix ] || [ ! -d /tmp/.ICE-unix ]; then
+  log "ERROR: /tmp/.X11-unix or /tmp/.ICE-unix missing; init script should create them"
+  ls -ld /tmp /tmp/.X11-unix /tmp/.ICE-unix 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
+  exit 1
+fi
+tmp_x11_owner="$(stat -c %U /tmp/.X11-unix 2>/dev/null || true)"
+tmp_ice_owner="$(stat -c %U /tmp/.ICE-unix 2>/dev/null || true)"
+if [ "${tmp_x11_owner}" != "root" ] || [ "${tmp_ice_owner}" != "root" ]; then
+  log "WARNING: /tmp socket dirs not root-owned (X11=${tmp_x11_owner} ICE=${tmp_ice_owner}); Xwayland/ksmserver may fail"
+fi
 
 # Start Sunshine early (doesn't require WM)
 if command -v sunshine >/dev/null 2>&1; then
@@ -86,12 +93,16 @@ if ! command -v startplasma-x11 >/dev/null 2>&1; then
   exit 1
 fi
 
-display_num=${SELKIES_XWAYLAND_DISPLAY_NUM:-1}
-export DISPLAY=":${display_num}"
+display_num=${SELKIES_XWAYLAND_DISPLAY_NUM:-}
+if [ -n "${display_num}" ]; then
+  export DISPLAY=":${display_num}"
+else
+  export DISPLAY=""
+fi
 
 # Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
-export XAUTHORITY="${XDG_RUNTIME_DIR}/Xauthority"
-export ICEAUTHORITY="${XDG_RUNTIME_DIR}/ICEauthority"
+export XAUTHORITY="$HOME/.Xauthority"
+export ICEAUTHORITY="$HOME/.ICEauthority"
 rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
@@ -104,26 +115,66 @@ if command -v kwin_x11 >/dev/null 2>&1; then
   log "Set KDEWM=${KDEWM}"
 fi
 
-if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
-  log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
-  # Rootless Xwayland on top of the existing Wayland compositor.
-  # -terminate: exit when last client disconnects
-  # -noreset: keep server alive across client restarts
-  Xwayland "${DISPLAY}" -rootless -terminate -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
+if [ -n "${display_num}" ]; then
+  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+    log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
+    Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
+  fi
 
   i=0
-  while [ $i -lt 10 ]; do
+  while [ $i -lt 30 ]; do
     if [ -S "/tmp/.X11-unix/X${display_num}" ]; then
       break
     fi
     sleep 1
     i=$((i + 1))
   done
-fi
 
-if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
-  log "ERROR: Xwayland did not create /tmp/.X11-unix/X${display_num}; see /config/xwayland.log"
-  exit 1
+  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+    log "ERROR: Xwayland did not create /tmp/.X11-unix/X${display_num}; see /config/xwayland.log"
+    exit 1
+  fi
+else
+  log "Starting Xwayland with -displayfd (auto-pick display) on ${WAYLAND_DISPLAY}"
+  dispfile="$(mktemp -p /tmp selkies-xwayland-display.XXXXXX)"
+  rm -f "${dispfile}" >/dev/null 2>&1 || true
+  : >"${dispfile}" 2>/dev/null || true
+
+  # Start Xwayland and have it write the chosen display number to fd 3.
+  exec 3>"${dispfile}"
+  Xwayland -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" -displayfd 3 >/config/xwayland.log 2>&1 &
+  exec 3>&-
+
+  i=0
+  while [ $i -lt 10 ]; do
+    display_num="$(cat "${dispfile}" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [ -n "${display_num}" ]; then
+      break
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+
+  if [ -z "${display_num}" ]; then
+    log "ERROR: Xwayland did not report a display number via -displayfd; see /config/xwayland.log"
+    exit 1
+  fi
+
+  export DISPLAY=":${display_num}"
+
+  i=0
+  while [ $i -lt 30 ]; do
+    if [ -S "/tmp/.X11-unix/X${display_num}" ]; then
+      break
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+
+  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+    log "ERROR: Xwayland did not create /tmp/.X11-unix/X${display_num}; see /config/xwayland.log"
+    exit 1
+  fi
 fi
 
 log "Launching startplasma-x11 on ${DISPLAY}; logs -> ${kde_log}"

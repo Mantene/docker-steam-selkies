@@ -12,6 +12,7 @@ set -euo pipefail
 
 log() {
 	echo "[steam-selkies][dbus-helper] $*"
+	echo "[steam-selkies][dbus-helper] $*" >>/config/steam-selkies.log 2>/dev/null || true
 }
 
 helper=/usr/lib/dbus-1.0/dbus-daemon-launch-helper
