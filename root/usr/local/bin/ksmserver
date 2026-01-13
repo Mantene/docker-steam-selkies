@@ -18,7 +18,13 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
 
   # If the file is empty, seed it. KDE/ICE can treat an empty authority as unusable.
   if [ ! -s "${ICEAUTHORITY}" ] && command -v iceauth >/dev/null 2>&1; then
-    cookie="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || echo "" )"
+    # iceauth expects authdata as even-length hex (no 0x prefix).
+    cookie_raw="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || echo "" )"
+    cookie="$(printf '%s' "${cookie_raw}" | tr -cd '0-9a-fA-F' | tr 'A-F' 'a-f')"
+    if [ $(( ${#cookie} % 2 )) -ne 0 ]; then
+      cookie="${cookie%?}"
+    fi
+
     if [ -n "${cookie}" ]; then
       set +e
       host="$(hostname 2>/dev/null || echo "")"
@@ -37,7 +43,6 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
         local mode="$1" # label
         local protocol_name="$2" # e.g. ICE
         local protocol_data="$3" # e.g. 0 or 1
-        local prefix_0x="$4" # either "0x" or ""
         local tmpcmd
 
         tmpcmd="${TMPDIR:-/tmp}/iceauth.cmd.$$"
@@ -46,10 +51,11 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
             [ -n "${netid}" ] || continue
             # Per iceauth(1): add protocol_name protocol_data netid authname authdata
             echo "remove ${protocol_name} ${protocol_data} ${netid} MIT-MAGIC-COOKIE-1"
-            echo "add ${protocol_name} ${protocol_data} ${netid} MIT-MAGIC-COOKIE-1 ${prefix_0x}${cookie}"
+            echo "add ${protocol_name} ${protocol_data} ${netid} MIT-MAGIC-COOKIE-1 ${cookie}"
           done
           echo "list"
-          echo "quit"
+          # IMPORTANT: 'exit' saves changes; 'quit' aborts changes.
+          echo "exit"
         } >"${tmpcmd}" 2>/dev/null
 
         out_seed="$(iceauth -f "${ICEAUTHORITY}" <"${tmpcmd}" 2>&1)"
@@ -70,14 +76,12 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
       # Try multiple syntaxes. Stop as soon as the file becomes non-empty.
       size0="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
       log "ICEAUTHORITY before-seed size=${size0}"
+      log "ICEAUTHORITY seed cookie_hex_len=${#cookie}"
 
       # protocol_data must be even-length hex (e.g. 00, 01), not "0".
-      try_seed "stdin-ICE-00" "ICE" "00" "" || \
-      try_seed "stdin-ICE-00-0x" "ICE" "00" "0x" || \
-      try_seed "stdin-ICE-01" "ICE" "01" "" || \
-      try_seed "stdin-ICE-01-0x" "ICE" "01" "0x" || \
-      try_seed "stdin-ICE-00000000" "ICE" "00000000" "" || \
-      try_seed "stdin-ICE-00000000-0x" "ICE" "00000000" "0x" || true
+      try_seed "stdin-ICE-00" "ICE" "00" || \
+      try_seed "stdin-ICE-01" "ICE" "01" || \
+      try_seed "stdin-ICE-00000000" "ICE" "00000000" || true
 
       # Log a short listing (no secrets) so we can verify entries exist.
       list_out="$(iceauth -f "${ICEAUTHORITY}" list 2>/dev/null | head -n 5)"
