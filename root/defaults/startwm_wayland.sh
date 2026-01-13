@@ -278,8 +278,8 @@ if [ -z "${display_num}" ]; then
           "localhost/unix${DISPLAY}" \
           "localhost${DISPLAY}"; do
           [ -n "${netid}" ] || continue
-          iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
-          iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${ice_cookie}" >/dev/null 2>&1
+          iceauth -f "${ICEAUTHORITY}" remove "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
+          iceauth -f "${ICEAUTHORITY}" add "${netid}" MIT-MAGIC-COOKIE-1 "${ice_cookie}" >/dev/null 2>&1
         done
 
         # Some iceauth builds don't support the CLI subcommand form reliably.
@@ -297,8 +297,8 @@ if [ -z "${display_num}" ]; then
               "localhost/unix${DISPLAY}" \
               "localhost${DISPLAY}"; do
               [ -n "${netid}" ] || continue
-              echo "remove ICE ${netid} MIT-MAGIC-COOKIE-1"
-              echo "add ICE ${netid} MIT-MAGIC-COOKIE-1 ${ice_cookie}"
+              echo "remove ${netid} MIT-MAGIC-COOKIE-1"
+              echo "add ${netid} MIT-MAGIC-COOKIE-1 ${ice_cookie}"
             done
             echo "quit"
           } >"${tmpcmd}" 2>/dev/null

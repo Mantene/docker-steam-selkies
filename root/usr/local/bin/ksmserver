@@ -32,8 +32,8 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
         "localhost/unix${DISPLAY:-}" \
         "localhost${DISPLAY:-}"; do
         [ -n "${netid}" ] || continue
-        iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
-        out_add="$(iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" 2>&1)"
+        iceauth -f "${ICEAUTHORITY}" remove "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
+        out_add="$(iceauth -f "${ICEAUTHORITY}" add "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" 2>&1)"
         rc_add=$?
         if [ ${rc_add} -ne 0 ] && [ -n "${out_add}" ]; then
           log "iceauth-add: rc=${rc_add} netid=${netid} out=${out_add}"
@@ -58,8 +58,8 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
             "localhost/unix${DISPLAY:-}" \
             "localhost${DISPLAY:-}"; do
             [ -n "${netid}" ] || continue
-            echo "remove ICE ${netid} MIT-MAGIC-COOKIE-1"
-            echo "add ICE ${netid} MIT-MAGIC-COOKIE-1 ${cookie}"
+            echo "remove ${netid} MIT-MAGIC-COOKIE-1"
+            echo "add ${netid} MIT-MAGIC-COOKIE-1 ${cookie}"
           done
           echo "list"
           echo "quit"
