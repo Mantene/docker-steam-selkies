@@ -43,7 +43,8 @@ RUN \
     xwayland \
     wget \
     va-driver-all \
-    steam-installer \
+    steam-installer && \
+  apt-get install -y --no-install-recommends \
     plasma-desktop \
     sddm \
     kde-plasma-desktop \
