@@ -8,7 +8,7 @@ if ! command -v pgrep >/dev/null 2>&1; then
 	exit 0
 fi
 
-if pgrep -f "^/usr/libexec/elogind(\s|$)" >/dev/null 2>&1 || pgrep -x elogind >/dev/null 2>&1; then
+if pgrep -f "(^|/)elogind(\s|$)" >/dev/null 2>&1; then
 	echo "[steam-selkies] elogind already running"
 	exit 0
 fi
@@ -26,12 +26,18 @@ if [ -x /etc/init.d/elogind ]; then
 	exit 0
 fi
 
-if [ -x /usr/libexec/elogind ]; then
-	echo "[steam-selkies] Starting elogind via /usr/libexec/elogind"
-	# elogind should daemonize itself when run without options.
-	# Run it in background so cont-init can proceed.
-	/usr/libexec/elogind &
-	exit 0
-fi
+for p in \
+	/usr/lib/elogind/elogind \
+	/lib/elogind/elogind \
+	/usr/libexec/elogind/elogind \
+	/libexec/elogind/elogind \
+	/usr/sbin/elogind \
+	/usr/bin/elogind; do
+	if [ -x "${p}" ] && [ ! -d "${p}" ]; then
+		echo "[steam-selkies] Starting elogind via ${p}"
+		"${p}" &
+		exit 0
+	fi
+done
 
 echo "[steam-selkies] WARNING: elogind not found; login1 may be unavailable" >&2

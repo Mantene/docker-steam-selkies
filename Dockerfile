@@ -114,6 +114,7 @@ RUN chmod +x \
   /usr/local/bin/org.freedesktop.login1 \
   /usr/local/bin/selkies-smoke-test \
   /usr/local/bin/steam-selkies \
+  /custom-cont-init.d/10-tmp-x11-dirs.sh \
   /custom-cont-init.d/11-dbus-servicehelper-hardening.sh \
   /custom-cont-init.d/44-start-elogind.sh \
   /custom-cont-init.d/45-selkies-wayland-socket-index.sh \

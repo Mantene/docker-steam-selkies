@@ -56,7 +56,7 @@ if ! elogind_bin="$(find_elogind_bin)"; then
 	exit 0
 fi
 
-service_dirs="$(get_dbus_service_dirs | awk 'NF' | grep -E '/system-services/?$' | sort -u)"
+service_dirs="$(get_dbus_service_dirs | awk 'NF' | grep -E '/system-services/?$' | sort -u || true)"
 if [ -z "${service_dirs}" ]; then
 	service_dirs=$(cat <<'EOF'
 /etc/dbus-1/system-services

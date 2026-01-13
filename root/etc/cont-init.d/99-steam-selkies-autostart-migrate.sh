@@ -1,6 +1,36 @@
 #!/bin/bash
 set -e
 
+install_kde_autostart_if_legacy() {
+  local target="/config/.config/openbox/autostart"
+  local desired="/defaults/autostart"
+
+  [ -r "${desired}" ] || return 0
+
+  # If the user has never created the Openbox autostart, let the base image copy defaults.
+  if [ ! -f "${target}" ]; then
+    return 0
+  fi
+
+  # If the user already has a KDE-managed autostart, leave it alone.
+  if grep -q 'steam-selkies-managed:desktop=kde' "${target}" 2>/dev/null; then
+    return 0
+  fi
+
+  # Only replace the autostart if it looks like the legacy minimal one:
+  # - starts Sunshine
+  # - launches Steam directly
+  # - does not mention Plasma
+  if grep -q '^# Start Sunshine' "${target}" \
+    && grep -Eq '^[[:space:]]*(steam|steam-selkies)[[:space:]]*$' "${target}" \
+    && ! grep -q 'startplasma' "${target}"; then
+    cp -f "${target}" "${target}.bak.$(date +%s)" 2>/dev/null || true
+    cp -f "${desired}" "${target}"
+    chmod +x "${target}" || true
+    echo "[steam-selkies] Updated Openbox autostart to KDE launcher: ${target}"
+  fi
+}
+
 fix_autostart() {
   local file="$1"
 
@@ -31,3 +61,5 @@ fix_autostart() {
 fix_autostart /config/.config/openbox/autostart
 fix_autostart /config/.config/wayfire/autostart
 fix_autostart /config/.config/labwc/autostart
+
+install_kde_autostart_if_legacy

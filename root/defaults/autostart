@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/bin/sh
+
+## steam-selkies-managed:desktop=kde
 
 echo "[steam-selkies] autostart: attempting to launch KDE (DISPLAY=${DISPLAY-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY-})" >>/config/steam-selkies.log 2>&1 || true
 # Ensure Steam autostarts in KDE
@@ -26,29 +28,40 @@ if command -v selkies-smoke-test >/dev/null 2>&1; then
   selkies-smoke-test
 fi
 
-run_with_dbus() {
-  if command -v dbus-run-session >/dev/null 2>&1; then
-    exec dbus-run-session -- "$@"
-  fi
-
-  if command -v dbus-launch >/dev/null 2>&1; then
-    eval "$(dbus-launch --sh-syntax)"
-    export DBUS_SESSION_BUS_ADDRESS
-    exec "$@"
-  fi
-
-  exec "$@"
-}
+set -eu
 
 # Selkies already provides an X server (Xorg or Xwayland). Prefer Plasma X11 inside
 # that session; it avoids nested compositors and works in both X11 + Wayland Selkies modes.
 if command -v startplasma-x11 >/dev/null 2>&1; then
   if [ -z "${DISPLAY-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
-    export DISPLAY=:0
+    DISPLAY=:0
+    export DISPLAY
   fi
 
   if [ -n "${DISPLAY-}" ]; then
-    run_with_dbus startplasma-x11
+    # Prevent repeated attempts.
+    if [ ! -f /tmp/steam-selkies-kde-started ]; then
+      : > /tmp/steam-selkies-kde-started 2>/dev/null || true
+
+      # If Openbox is the running WM, KWin won't start until Openbox is gone.
+      # Terminate Openbox and then start Plasma as the desktop session.
+      if pgrep -x openbox >/dev/null 2>&1; then
+        echo "[steam-selkies] stopping openbox to allow KWin" >>/config/steam-selkies.log 2>&1 || true
+        pkill -TERM -x openbox >/dev/null 2>&1 || true
+        sleep 1
+      fi
+
+      echo "[steam-selkies] launching startplasma-x11 (DISPLAY=${DISPLAY})" >>/config/steam-selkies.log 2>&1 || true
+      if command -v dbus-run-session >/dev/null 2>&1; then
+        exec dbus-run-session -- startplasma-x11
+      fi
+      if command -v dbus-launch >/dev/null 2>&1; then
+        eval "$(dbus-launch --sh-syntax)"
+        export DBUS_SESSION_BUS_ADDRESS
+        exec startplasma-x11
+      fi
+      exec startplasma-x11
+    fi
   fi
 fi
 
@@ -60,7 +73,8 @@ if command -v startplasma-wayland >/dev/null 2>&1 && command -v weston >/dev/nul
 
   uid="$(id -u)"
   gid="$(id -g)"
-  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-${uid}}"
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-${uid}}"
+  export XDG_RUNTIME_DIR
   mkdir -p "${XDG_RUNTIME_DIR}"
   chmod 700 "${XDG_RUNTIME_DIR}" || true
   chown "${uid}:${gid}" "${XDG_RUNTIME_DIR}" 2>/dev/null || true
@@ -76,13 +90,23 @@ if command -v startplasma-wayland >/dev/null 2>&1 && command -v weston >/dev/nul
       --scale=1
   ) &
 
-  for _ in {1..15}; do
+  i=0
+  while [ $i -lt 15 ]; do
     if [ -S "${XDG_RUNTIME_DIR}/${socket_name}" ]; then break; fi
     sleep 1
+    i=$((i + 1))
   done
 
   export WAYLAND_DISPLAY="${socket_name}"
-  run_with_dbus startplasma-wayland
+  if command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session -- startplasma-wayland
+  fi
+  if command -v dbus-launch >/dev/null 2>&1; then
+    eval "$(dbus-launch --sh-syntax)"
+    export DBUS_SESSION_BUS_ADDRESS
+    exec startplasma-wayland
+  fi
+  exec startplasma-wayland
 fi
 
 echo "KDE Plasma not started: no usable display/session found (DISPLAY=${DISPLAY-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY-})"
