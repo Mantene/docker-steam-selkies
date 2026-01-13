@@ -71,10 +71,13 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
       size0="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
       log "ICEAUTHORITY before-seed size=${size0}"
 
-      try_seed "stdin-ICE-0" "ICE" "0" "" || \
-      try_seed "stdin-ICE-0-0x" "ICE" "0" "0x" || \
-      try_seed "stdin-ICE-1" "ICE" "1" "" || \
-      try_seed "stdin-ICE-1-0x" "ICE" "1" "0x" || true
+      # protocol_data must be even-length hex (e.g. 00, 01), not "0".
+      try_seed "stdin-ICE-00" "ICE" "00" "" || \
+      try_seed "stdin-ICE-00-0x" "ICE" "00" "0x" || \
+      try_seed "stdin-ICE-01" "ICE" "01" "" || \
+      try_seed "stdin-ICE-01-0x" "ICE" "01" "0x" || \
+      try_seed "stdin-ICE-00000000" "ICE" "00000000" "" || \
+      try_seed "stdin-ICE-00000000-0x" "ICE" "00000000" "0x" || true
 
       # Log a short listing (no secrets) so we can verify entries exist.
       list_out="$(iceauth -f "${ICEAUTHORITY}" list 2>/dev/null | head -n 5)"
