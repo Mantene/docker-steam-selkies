@@ -30,12 +30,12 @@ run_as_abc() {
     return $?
   fi
   if command -v runuser >/dev/null 2>&1; then
-    runuser -u abc -- "$@"
+    runuser -u abc --preserve-environment -- "$@"
     return $?
   fi
 
   # Fallback
-  su -s /bin/bash abc -c "$(printf '%q ' "$@")"
+  su -m -s /bin/bash abc -c "$(printf '%q ' "$@")"
 }
 
 exec_as_abc() {
@@ -47,10 +47,10 @@ exec_as_abc() {
     exec s6-setuidgid abc "$@"
   fi
   if command -v runuser >/dev/null 2>&1; then
-    exec runuser -u abc -- "$@"
+    exec runuser -u abc --preserve-environment -- "$@"
   fi
 
-  exec su -s /bin/bash abc -c "$(printf '%q ' "$@")"
+  exec su -m -s /bin/bash abc -c "$(printf '%q ' "$@")"
 }
 
 can_write() {
@@ -72,6 +72,11 @@ export WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1}
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/config/.XDG}
 mkdir -p "${XDG_RUNTIME_DIR}" || true
 chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+
+if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
+  chown abc:users "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+  chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+fi
 
 export HOME="${HOME:-/config}"
 log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${HOME:-}"
@@ -170,6 +175,8 @@ chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
   chown abc:users "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 fi
+
+stat -c 'auth: %a %U:%G %n' "${XAUTHORITY}" "${ICEAUTHORITY}" 2>/dev/null | while IFS= read -r line; do log "${line}"; done || true
 
 # Force an X11 window manager. Plasma can otherwise try kwin_wayland_wrapper --xwayland,
 # which still requires DRM/KMS and fails in many container setups.
