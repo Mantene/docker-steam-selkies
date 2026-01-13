@@ -29,10 +29,13 @@ if command -v weston >/dev/null 2>&1 && command -v startplasma-wayland >/dev/nul
   export XDG_SESSION_TYPE=wayland
   export QT_QPA_PLATFORM=wayland
   export WAYLAND_DISPLAY=wayland-0
+  export XDG_RUNTIME_DIR=/tmp/xdg
+  mkdir -p "$XDG_RUNTIME_DIR"
+  chmod 700 "$XDG_RUNTIME_DIR"
   weston --headless --socket=wayland-0 &
   # Wait for weston to be ready
   for i in {1..10}; do
-    if [ -S /run/user/$(id -u)/wayland-0 ]; then break; fi
+    if [ -S "$XDG_RUNTIME_DIR/wayland-0" ]; then break; fi
     sleep 1
   done
   startplasma-wayland
