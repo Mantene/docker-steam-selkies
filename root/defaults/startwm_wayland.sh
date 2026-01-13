@@ -332,6 +332,9 @@ fi
 log "Launching startplasma-x11 on ${DISPLAY}; logs -> ${kde_log}"
 log "Plasma env: HOME=${HOME} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY} XAUTHORITY=${XAUTHORITY} ICEAUTHORITY=${ICEAUTHORITY} TMPDIR=${TMPDIR}"
 
+# Ensure sane default permissions for KDE-generated temp files.
+umask 022
+
 # Preflight diagnostics for the two remaining persistent failures (xrdb + ICEAuthority).
 if command -v xrdb >/dev/null 2>&1; then
   if ! run_as_abc xrdb -version >/dev/null 2>&1; then

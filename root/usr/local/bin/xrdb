@@ -13,7 +13,12 @@ for a in "$@"; do
   case "$a" in
     /config/tmp/*|/*)
       if [ -e "$a" ]; then
-        log "arg-file: exists ${a} -> $(ls -l "$a" 2>/dev/null || true)"
+        perms_line="$(ls -l "$a" 2>/dev/null || true)"
+        log "arg-file: exists ${a} -> ${perms_line}"
+        if [ ! -r "$a" ]; then
+          chmod 600 "$a" 2>/dev/null || true
+          log "arg-file: fixed perms (chmod 600) -> $(ls -l "$a" 2>/dev/null || true)"
+        fi
       else
         log "arg-file: missing ${a}"
       fi

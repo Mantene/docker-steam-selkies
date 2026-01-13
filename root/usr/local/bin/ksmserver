@@ -12,6 +12,25 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
     log "ICEAUTHORITY exists: $(ls -l "${ICEAUTHORITY}" 2>/dev/null || true)"
   else
     log "ICEAUTHORITY missing: ${ICEAUTHORITY}"
+    touch "${ICEAUTHORITY}" 2>/dev/null || true
+    chmod 600 "${ICEAUTHORITY}" 2>/dev/null || true
+  fi
+
+  # If the file is empty, seed it. KDE/ICE can treat an empty authority as unusable.
+  if [ ! -s "${ICEAUTHORITY}" ] && command -v iceauth >/dev/null 2>&1; then
+    cookie="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || echo "" )"
+    if [ -n "${cookie}" ]; then
+      for netid in \
+        "${DISPLAY:-}" \
+        "unix${DISPLAY:-}" \
+        "local/unix${DISPLAY:-}" \
+        "local/${DISPLAY:-}"; do
+        [ -n "${netid}" ] || continue
+        iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1 || true
+        iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" >/dev/null 2>&1 || true
+      done
+      log "ICEAUTHORITY seeded (size now: $(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0))"
+    fi
   fi
 fi
 
