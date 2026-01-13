@@ -93,11 +93,7 @@ if ! command -v startplasma-x11 >/dev/null 2>&1; then
 fi
 
 display_num=${SELKIES_XWAYLAND_DISPLAY_NUM:-}
-if [ -n "${display_num}" ]; then
-  export DISPLAY=":${display_num}"
-else
-  export DISPLAY=""
-fi
+export DISPLAY=""
 
 # Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
 export XAUTHORITY="$HOME/.Xauthority"
@@ -114,66 +110,54 @@ if command -v kwin_x11 >/dev/null 2>&1; then
   log "Set KDEWM=${KDEWM}"
 fi
 
-if [ -n "${display_num}" ]; then
-  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+# If the base compositor already started Xwayland, reuse it.
+for n in 0 1 2 3 4 5 6 7 8 9; do
+  if [ -S "/tmp/.X11-unix/X${n}" ]; then
+    display_num="$n"
+    break
+  fi
+done
+
+if [ -z "${display_num}" ]; then
+  # Try to start our own rootless Xwayland on a free display.
+  for n in 0 1 2 3 4 5 6 7 8 9; do
+    if [ -S "/tmp/.X11-unix/X${n}" ]; then
+      continue
+    fi
+    display_num="$n"
+    export DISPLAY=":${display_num}"
     log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
     Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
-  fi
+    xwpid=$!
 
-  i=0
-  while [ $i -lt 30 ]; do
+    i=0
+    while [ $i -lt 30 ]; do
+      if [ -S "/tmp/.X11-unix/X${display_num}" ]; then
+        break
+      fi
+      if ! kill -0 "${xwpid}" >/dev/null 2>&1; then
+        log "ERROR: Xwayland exited early (pid=${xwpid}); see /config/xwayland.log"
+        break
+      fi
+      sleep 1
+      i=$((i + 1))
+    done
+
     if [ -S "/tmp/.X11-unix/X${display_num}" ]; then
       break
     fi
-    sleep 1
-    i=$((i + 1))
+    # Try next display number.
+    display_num=""
+    export DISPLAY=""
   done
-
-  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
-    log "ERROR: Xwayland did not create /tmp/.X11-unix/X${display_num}; see /config/xwayland.log"
-    exit 1
-  fi
 else
-  log "Starting Xwayland with -displayfd (auto-pick display) on ${WAYLAND_DISPLAY}"
-  dispfile="$(mktemp -p /tmp selkies-xwayland-display.XXXXXX)"
-  rm -f "${dispfile}" >/dev/null 2>&1 || true
-  : >"${dispfile}" 2>/dev/null || true
-
-  # Start Xwayland and have it write the chosen display number to fd 3.
-  exec 3>"${dispfile}"
-  Xwayland -rootless -noreset -nolisten tcp -auth "${XAUTHORITY}" -displayfd 3 >/config/xwayland.log 2>&1 &
-  exec 3>&-
-
-  i=0
-  while [ $i -lt 10 ]; do
-    display_num="$(cat "${dispfile}" 2>/dev/null | tr -d '[:space:]' || true)"
-    if [ -n "${display_num}" ]; then
-      break
-    fi
-    sleep 1
-    i=$((i + 1))
-  done
-
-  if [ -z "${display_num}" ]; then
-    log "ERROR: Xwayland did not report a display number via -displayfd; see /config/xwayland.log"
-    exit 1
-  fi
-
   export DISPLAY=":${display_num}"
+  log "Reusing existing Xwayland socket at ${DISPLAY}"
+fi
 
-  i=0
-  while [ $i -lt 30 ]; do
-    if [ -S "/tmp/.X11-unix/X${display_num}" ]; then
-      break
-    fi
-    sleep 1
-    i=$((i + 1))
-  done
-
-  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
-    log "ERROR: Xwayland did not create /tmp/.X11-unix/X${display_num}; see /config/xwayland.log"
-    exit 1
-  fi
+if [ -z "${display_num}" ] || [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+  log "ERROR: No usable X11 socket found/created under /tmp/.X11-unix; see /config/xwayland.log"
+  exit 1
 fi
 
 log "Launching startplasma-x11 on ${DISPLAY}; logs -> ${kde_log}"
