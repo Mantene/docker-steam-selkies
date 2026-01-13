@@ -58,7 +58,7 @@ RUN \
     dbus-x11 \
     weston \
     kwin-wayland \
-    plasma-workspace-wayland && \
+    plasma-workspace && \
   if [ -f /usr/bin/xterm ]; then chmod u-s /usr/bin/xterm || true; fi && \
   echo "**** ensure elogind daemon path ****" && \
   ELOGIND_DAEMON="" && \
