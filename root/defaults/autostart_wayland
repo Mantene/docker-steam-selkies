@@ -24,9 +24,25 @@ if command -v selkies-smoke-test >/dev/null 2>&1; then
   selkies-smoke-test
 fi
 
-# Launch KDE Plasma (Wayland session)
-if command -v startplasma-wayland >/dev/null 2>&1; then
+# Prefer KDE Plasma Wayland session with headless weston, fallback to X11 if unavailable
+if command -v weston >/dev/null 2>&1 && command -v startplasma-wayland >/dev/null 2>&1; then
+  export XDG_SESSION_TYPE=wayland
+  export QT_QPA_PLATFORM=wayland
+  export WAYLAND_DISPLAY=wayland-0
+  weston --headless --socket=wayland-0 &
+  for i in {1..10}; do
+    if [ -S /run/user/$(id -u)/wayland-0 ]; then break; fi
+    sleep 1
+  done
   startplasma-wayland
+elif command -v Xorg >/dev/null 2>&1 && command -v startplasma-x11 >/dev/null 2>&1; then
+  Xorg :0 -nolisten tcp vt1 &
+  export DISPLAY=:0
+  for i in {1..10}; do
+    if xdpyinfo -display :0 >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  startplasma-x11
 else
-  echo "KDE Plasma (startplasma-wayland) not found!"
+  echo "KDE Plasma (Wayland or X11) not found!"
 fi

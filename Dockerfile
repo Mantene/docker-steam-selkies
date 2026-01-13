@@ -54,7 +54,8 @@ RUN \
     kde-cli-tools \
     kde-spectacle \
     xinit \
-    dbus-x11 && \
+    dbus-x11 \
+    weston && \
   if [ -f /usr/bin/xterm ]; then chmod u-s /usr/bin/xterm || true; fi && \
   echo "**** ensure elogind daemon path ****" && \
   ELOGIND_DAEMON="" && \
