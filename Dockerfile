@@ -117,6 +117,7 @@ RUN chmod +x \
   /usr/local/bin/steam-selkies \
   /custom-cont-init.d/10-tmp-x11-dirs.sh \
   /custom-cont-init.d/11-dbus-servicehelper-hardening.sh \
+  /custom-cont-init.d/12-fix-config-ownership.sh \
   /custom-cont-init.d/44-start-elogind.sh \
   /custom-cont-init.d/45-selkies-wayland-socket-index.sh \
   /custom-cont-init.d/46-dbus-login1-override.sh \

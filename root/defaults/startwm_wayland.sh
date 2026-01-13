@@ -8,6 +8,11 @@ log() {
   echo "[steam-selkies][startwm_wayland] $*" | tee -a /config/steam-selkies.log >/dev/null 2>&1 || true
 }
 
+can_write() {
+  local p="$1"
+  ( : >>"$p" ) >/dev/null 2>&1
+}
+
 # Basic session hints
 export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=KDE
@@ -19,8 +24,12 @@ export WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1}
 
 # Runtime dir: base images commonly use /config/.XDG
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/config/.XDG}
-mkdir -p "${XDG_RUNTIME_DIR}"
-chmod 700 "${XDG_RUNTIME_DIR}" || true
+mkdir -p "${XDG_RUNTIME_DIR}" || true
+chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+
+log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${HOME:-}"
+log "Dirs: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}"
+ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
 
 # Start Sunshine early (doesn't require WM)
 if command -v sunshine >/dev/null 2>&1; then
@@ -31,7 +40,10 @@ if command -v sunshine >/dev/null 2>&1; then
 fi
 
 # Ensure Steam autostarts once Plasma is up
-mkdir -p "$HOME/.config/autostart"
+HOME="${HOME:-/config}"
+
+set +e
+mkdir -p "$HOME/.config/autostart" >/dev/null 2>&1
 cat > "$HOME/.config/autostart/steam.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -42,6 +54,12 @@ X-GNOME-Autostart-enabled=true
 Name=Steam
 Comment=Start Steam client
 EOF
+rc=$?
+set -e
+
+if [ $rc -ne 0 ]; then
+  log "WARNING: Could not write $HOME/.config/autostart/steam.desktop (permission denied?). Continuing without it."
+fi
 
 # Optional: smoke test window (no-op unless STEAM_DEBUG_SMOKE_TEST=true)
 if command -v selkies-smoke-test >/dev/null 2>&1; then
@@ -49,6 +67,9 @@ if command -v selkies-smoke-test >/dev/null 2>&1; then
 fi
 
 kde_log=/config/kde-plasma-wayland.log
+if ! can_write "${kde_log}"; then
+  kde_log=/tmp/kde-plasma-wayland.log
+fi
 log "Launching startplasma-wayland (WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}); logs -> ${kde_log}"
 
 # startplasma-wayland launches kwin_wayland itself as the compositor.

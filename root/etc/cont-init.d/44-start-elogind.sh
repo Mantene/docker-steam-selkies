@@ -33,7 +33,7 @@ for p in \
 	/libexec/elogind/elogind \
 	/usr/sbin/elogind \
 	/usr/bin/elogind; do
-	if [ -x "${p}" ] && [ -f "${p}" ]; then
+	if [ -x "${p}" ]; then
 		echo "[steam-selkies] Starting elogind via ${p}"
 		"${p}" &
 		exit 0
@@ -45,7 +45,7 @@ if command -v dpkg-query >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; the
 	if dpkg-query -W -f='${Status}' elogind 2>/dev/null | grep -q "installed"; then
 		while IFS= read -r p; do
 			[ -n "${p}" ] || continue
-			if [ -x "${p}" ] && [ -f "${p}" ] && echo "${p}" | grep -Eq '/elogind$'; then
+			if [ -x "${p}" ] && echo "${p}" | grep -Eq '/elogind$'; then
 				echo "[steam-selkies] Starting elogind via ${p} (dpkg -L)"
 				"${p}" &
 				exit 0
