@@ -25,23 +25,37 @@ if command -v selkies-smoke-test >/dev/null 2>&1; then
 fi
 
 # Prefer KDE Plasma Wayland session with headless weston, fallback to X11 if unavailable
-if command -v weston >/dev/null 2>&1 && command -v startplasma-wayland >/dev/null 2>&1; then
+if command -v startplasma-wayland >/dev/null 2>&1; then
   export XDG_SESSION_TYPE=wayland
   export QT_QPA_PLATFORM=wayland
   export WAYLAND_DISPLAY=wayland-0
   export XDG_RUNTIME_DIR=/tmp/xdg
   mkdir -p "$XDG_RUNTIME_DIR"
   chmod 700 "$XDG_RUNTIME_DIR"
-  weston --headless --socket=wayland-0 --width=1920 --height=1080 --scale=1 &
-  # Wait for weston to be ready
-  for i in {1..10}; do
-    if [ -S "$XDG_RUNTIME_DIR/wayland-0" ]; then break; fi
-    sleep 1
-  done
-  # Start a user D-Bus session for KDE
-  eval "$(dbus-launch --sh-syntax)"
-  export DBUS_SESSION_BUS_ADDRESS
-  startplasma-wayland
+  mkdir -p /tmp/.X11-unix
+  chmod 1777 /tmp/.X11-unix
+  if command -v weston >/dev/null 2>&1; then
+    weston --headless --socket=wayland-0 --width=1920 --height=1080 --scale=1 &
+    # Wait for weston to be ready
+    for i in {1..10}; do
+      if [ -S "$XDG_RUNTIME_DIR/wayland-0" ]; then break; fi
+      sleep 1
+    done
+    # Start a user D-Bus session for KDE
+    eval "$(dbus-launch --sh-syntax)"
+    export DBUS_SESSION_BUS_ADDRESS
+    startplasma-wayland
+  elif command -v kwin_wayland >/dev/null 2>&1; then
+    kwin_wayland --xwayland --width 1920 --height 1080 &
+    # Wait for kwin_wayland to be ready
+    sleep 5
+    eval "$(dbus-launch --sh-syntax)"
+    export DBUS_SESSION_BUS_ADDRESS
+    startplasma-wayland
+  else
+    echo "Neither weston nor kwin_wayland found!"
+    exit 1
+  fi
 elif command -v Xorg >/dev/null 2>&1 && command -v startplasma-x11 >/dev/null 2>&1; then
   Xorg :0 -nolisten tcp vt1 &
   export DISPLAY=:0
