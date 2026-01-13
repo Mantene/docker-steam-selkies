@@ -150,7 +150,19 @@ if [ "${STEAM_DEBUG_STRACE_KSMSERVER:-0}" = "1" ] && command -v strace >/dev/nul
   trace_out="/config/ksmserver.filestrace.log"
   log "strace enabled: ${trace_out}"
   # File-related syscalls only; avoid leaking authority contents.
-  exec strace -f -qq -o "${trace_out}" -s 0 -e trace=%file "${REAL_KSMSERVER}" "$@"
+  strace -f -qq -o "${trace_out}" -s 0 -e trace=%file "${REAL_KSMSERVER}" "$@"
+  rc=$?
+
+  # Pull out ICE-relevant operations for quick diagnosis.
+  if [ -r "${trace_out}" ]; then
+    grep -E "(/tmp/\.ICEauthority-abc|/config/\.ICEauthority|/tmp/\.ICE-unix|/tmp/\.ICEauthority|\.ICEauthority)" "${trace_out}" \
+      | head -n 200 \
+      | while IFS= read -r line; do
+          log "strace-ice: ${line}"
+        done
+  fi
+
+  exit ${rc}
 fi
 
 exec "${REAL_KSMSERVER}" "$@"
