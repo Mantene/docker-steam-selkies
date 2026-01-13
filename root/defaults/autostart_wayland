@@ -1,3 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "[steam-selkies] autostart_wayland: attempting to launch KDE (DISPLAY=${DISPLAY-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY-})" >>/config/steam-selkies.log 2>&1 || true
+
 # Ensure Steam autostarts in KDE
 mkdir -p "$HOME/.config/autostart"
 cat > "$HOME/.config/autostart/steam.desktop" <<EOF
@@ -10,7 +15,6 @@ X-GNOME-Autostart-enabled=true
 Name=Steam
 Comment=Start Steam client
 EOF
-#!/bin/bash
 
 # Start Sunshine (GameStream server) in the background.
 if command -v sunshine >/dev/null 2>&1; then
@@ -24,25 +28,55 @@ if command -v selkies-smoke-test >/dev/null 2>&1; then
   selkies-smoke-test
 fi
 
-# Prefer KDE Plasma Wayland session with headless weston, fallback to X11 if unavailable
+run_with_dbus() {
+  if command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session -- "$@"
+  fi
+
+  if command -v dbus-launch >/dev/null 2>&1; then
+    eval "$(dbus-launch --sh-syntax)"
+    export DBUS_SESSION_BUS_ADDRESS
+    exec "$@"
+  fi
+
+  exec "$@"
+}
+
+# Prefer Plasma X11 inside the Selkies-provided X server when available.
+if command -v startplasma-x11 >/dev/null 2>&1; then
+  if [ -z "${DISPLAY-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+    export DISPLAY=:0
+  fi
+  if [ -n "${DISPLAY-}" ]; then
+    run_with_dbus startplasma-x11
+  fi
+fi
+
+# Fallback: start a headless Weston + Plasma Wayland.
 if command -v weston >/dev/null 2>&1 && command -v startplasma-wayland >/dev/null 2>&1; then
   export XDG_SESSION_TYPE=wayland
   export QT_QPA_PLATFORM=wayland
-  export WAYLAND_DISPLAY=wayland-0
-  weston --headless --socket=wayland-0 &
-  for i in {1..10}; do
-    if [ -S /run/user/$(id -u)/wayland-0 ]; then break; fi
+
+  uid="$(id -u)"
+  gid="$(id -g)"
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-${uid}}"
+  mkdir -p "${XDG_RUNTIME_DIR}"
+  chmod 700 "${XDG_RUNTIME_DIR}" || true
+  chown "${uid}:${gid}" "${XDG_RUNTIME_DIR}" 2>/dev/null || true
+
+  socket_name=wayland-0
+  (
+    unset WAYLAND_DISPLAY
+    exec weston --backend=headless-backend.so --socket="${socket_name}"
+  ) &
+
+  for _ in {1..15}; do
+    if [ -S "${XDG_RUNTIME_DIR}/${socket_name}" ]; then break; fi
     sleep 1
   done
-  startplasma-wayland
-elif command -v Xorg >/dev/null 2>&1 && command -v startplasma-x11 >/dev/null 2>&1; then
-  Xorg :0 -nolisten tcp vt1 &
-  export DISPLAY=:0
-  for i in {1..10}; do
-    if xdpyinfo -display :0 >/dev/null 2>&1; then break; fi
-    sleep 1
-  done
-  startplasma-x11
-else
-  echo "KDE Plasma (Wayland or X11) not found!"
+
+  export WAYLAND_DISPLAY="${socket_name}"
+  run_with_dbus startplasma-wayland
 fi
+
+echo "KDE Plasma not started: no usable display/session found (DISPLAY=${DISPLAY-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY-})"

@@ -1,4 +1,6 @@
 #!/bin/bash
+
+echo "[steam-selkies] autostart: attempting to launch KDE (DISPLAY=${DISPLAY-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY-})" >>/config/steam-selkies.log 2>&1 || true
 # Ensure Steam autostarts in KDE
 mkdir -p "$HOME/.config/autostart"
 cat > "$HOME/.config/autostart/steam.desktop" <<EOF
@@ -24,46 +26,63 @@ if command -v selkies-smoke-test >/dev/null 2>&1; then
   selkies-smoke-test
 fi
 
-# Prefer KDE Plasma Wayland session with headless weston, fallback to X11 if unavailable
-if command -v startplasma-wayland >/dev/null 2>&1; then
+run_with_dbus() {
+  if command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session -- "$@"
+  fi
+
+  if command -v dbus-launch >/dev/null 2>&1; then
+    eval "$(dbus-launch --sh-syntax)"
+    export DBUS_SESSION_BUS_ADDRESS
+    exec "$@"
+  fi
+
+  exec "$@"
+}
+
+# Selkies already provides an X server (Xorg or Xwayland). Prefer Plasma X11 inside
+# that session; it avoids nested compositors and works in both X11 + Wayland Selkies modes.
+if command -v startplasma-x11 >/dev/null 2>&1; then
+  if [ -z "${DISPLAY-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+    export DISPLAY=:0
+  fi
+
+  if [ -n "${DISPLAY-}" ]; then
+    run_with_dbus startplasma-x11
+  fi
+fi
+
+# Fallback: if no DISPLAY exists, try a fully headless Weston + Plasma Wayland.
+# NOTE: this is mainly for local testing; Selkies capture typically targets its own display.
+if command -v startplasma-wayland >/dev/null 2>&1 && command -v weston >/dev/null 2>&1; then
   export XDG_SESSION_TYPE=wayland
   export QT_QPA_PLATFORM=wayland
-  export WAYLAND_DISPLAY=wayland-0
-  export XDG_RUNTIME_DIR=/tmp/xdg
-  mkdir -p "$XDG_RUNTIME_DIR"
-  chmod 700 "$XDG_RUNTIME_DIR"
-  mkdir -p /tmp/.X11-unix
-  chmod 1777 /tmp/.X11-unix
-  if command -v weston >/dev/null 2>&1; then
-    weston --headless --socket=wayland-0 --width=1920 --height=1080 --scale=1 &
-    # Wait for weston to be ready
-    for i in {1..10}; do
-      if [ -S "$XDG_RUNTIME_DIR/wayland-0" ]; then break; fi
-      sleep 1
-    done
-    # Start a user D-Bus session for KDE
-    eval "$(dbus-launch --sh-syntax)"
-    export DBUS_SESSION_BUS_ADDRESS
-    startplasma-wayland
-  elif command -v kwin_wayland >/dev/null 2>&1; then
-    kwin_wayland --xwayland --width 1920 --height 1080 &
-    # Wait for kwin_wayland to be ready
-    sleep 5
-    eval "$(dbus-launch --sh-syntax)"
-    export DBUS_SESSION_BUS_ADDRESS
-    startplasma-wayland
-  else
-    echo "Neither weston nor kwin_wayland found!"
-    exit 1
-  fi
-elif command -v Xorg >/dev/null 2>&1 && command -v startplasma-x11 >/dev/null 2>&1; then
-  Xorg :0 -nolisten tcp vt1 &
-  export DISPLAY=:0
-  for i in {1..10}; do
-    if xdpyinfo -display :0 >/dev/null 2>&1; then break; fi
+
+  uid="$(id -u)"
+  gid="$(id -g)"
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-${uid}}"
+  mkdir -p "${XDG_RUNTIME_DIR}"
+  chmod 700 "${XDG_RUNTIME_DIR}" || true
+  chown "${uid}:${gid}" "${XDG_RUNTIME_DIR}" 2>/dev/null || true
+
+  socket_name=wayland-0
+  (
+    unset WAYLAND_DISPLAY
+    exec weston \
+      --backend=headless-backend.so \
+      --socket="${socket_name}" \
+      --width=1920 \
+      --height=1080 \
+      --scale=1
+  ) &
+
+  for _ in {1..15}; do
+    if [ -S "${XDG_RUNTIME_DIR}/${socket_name}" ]; then break; fi
     sleep 1
   done
-  startplasma-x11
-else
-  echo "KDE Plasma (Wayland or X11) not found!"
+
+  export WAYLAND_DISPLAY="${socket_name}"
+  run_with_dbus startplasma-wayland
 fi
+
+echo "KDE Plasma not started: no usable display/session found (DISPLAY=${DISPLAY-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY-})"

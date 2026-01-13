@@ -100,25 +100,29 @@ RUN \
     /var/tmp/*
 
 
-# add local files
-COPY root/ /root/
-COPY root/usr/local/bin/ /usr/local/bin/
-COPY root/etc/cont-init.d/ /etc/cont-init.d/
+# add local files (match linuxserver baseimage conventions)
+# - /defaults/* are used by the window manager/session
+# - /custom-cont-init.d/* run during container init
+COPY root/defaults/ /defaults/
+COPY root/usr/ /usr/
+COPY root/etc/dbus-1/ /etc/dbus-1/
+COPY root/etc/cont-init.d/ /custom-cont-init.d/
+
 # set permissions
 RUN chmod +x \
   /usr/local/bin/elogind-wrapper \
   /usr/local/bin/org.freedesktop.login1 \
   /usr/local/bin/selkies-smoke-test \
   /usr/local/bin/steam-selkies \
-  /etc/cont-init.d/11-dbus-servicehelper-hardening.sh \
-  /etc/cont-init.d/44-start-elogind.sh \
-  /etc/cont-init.d/45-selkies-wayland-socket-index.sh \
-  /etc/cont-init.d/46-dbus-login1-override.sh \
-  /etc/cont-init.d/47-dbus-servicehelper-permissions.sh \
-  /etc/cont-init.d/99-steam-selkies-autostart-migrate.sh \
-  /root/defaults/autostart
+  /custom-cont-init.d/11-dbus-servicehelper-hardening.sh \
+  /custom-cont-init.d/44-start-elogind.sh \
+  /custom-cont-init.d/45-selkies-wayland-socket-index.sh \
+  /custom-cont-init.d/46-dbus-login1-override.sh \
+  /custom-cont-init.d/47-dbus-servicehelper-permissions.sh \
+  /custom-cont-init.d/99-steam-selkies-autostart-migrate.sh \
+  /defaults/autostart
 
-ENTRYPOINT ["/root/defaults/autostart"]
+ENTRYPOINT ["/init"]
 
 # ports and volumes
 EXPOSE 3001 \
