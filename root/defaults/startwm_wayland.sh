@@ -195,6 +195,7 @@ fi
 
 # Start each boot with a fresh KDE log to avoid chasing stale errors.
 : >"${kde_log}" 2>/dev/null || true
+echo "[steam-selkies][kde-log] boot $(date -Is 2>/dev/null || date)" >>"${kde_log}" 2>/dev/null || true
 
 if ! command -v Xwayland >/dev/null 2>&1; then
   log "ERROR: Xwayland not found in image; cannot start Plasma X11 in Wayland mode"
@@ -210,7 +211,9 @@ export DISPLAY=""
 
 # Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
 export XAUTHORITY="$HOME/.Xauthority"
-export ICEAUTHORITY="$HOME/.ICEauthority"
+# IMPORTANT: put ICEAUTHORITY on a local filesystem (e.g., /tmp). Some hosts (notably Unraid
+# user shares) can be FUSE-backed and may not support the link/lock semantics libICE uses.
+export ICEAUTHORITY="/tmp/.ICEauthority-abc"
 rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true

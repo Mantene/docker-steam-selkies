@@ -12,6 +12,13 @@ log() {
 
 log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} ICEAUTHORITY=${ICEAUTHORITY:-} XAUTHORITY=${XAUTHORITY:-}"
 
+# If ICEAUTHORITY is on /config (often a host bind mount), move it to /tmp to avoid
+# libICE lock/link semantics failing on some FUSE-backed filesystems.
+if [ -n "${ICEAUTHORITY:-}" ] && printf '%s' "${ICEAUTHORITY}" | grep -q '^/config/'; then
+  export ICEAUTHORITY="/tmp/.ICEauthority-abc"
+  log "ICEAUTHORITY rewritten to ${ICEAUTHORITY} (local fs)"
+fi
+
 if [ -n "${ICEAUTHORITY:-}" ]; then
   if [ -e "${ICEAUTHORITY}" ]; then
     log "ICEAUTHORITY exists: $(ls -l "${ICEAUTHORITY}" 2>/dev/null || true)"
