@@ -12,6 +12,17 @@ log() {
 
 log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} ICEAUTHORITY=${ICEAUTHORITY:-} XAUTHORITY=${XAUTHORITY:-}"
 
+if [ -n "${HOME:-}" ]; then
+  if [ -e "${HOME}/.ICEauthority" ] || [ -L "${HOME}/.ICEauthority" ]; then
+    log "HOME/.ICEauthority: $(ls -l "${HOME}/.ICEauthority" 2>/dev/null || true)"
+    if command -v readlink >/dev/null 2>&1; then
+      log "HOME/.ICEauthority-> $(readlink -f "${HOME}/.ICEauthority" 2>/dev/null || true)"
+    fi
+  else
+    log "HOME/.ICEauthority: (missing)"
+  fi
+fi
+
 # If ICEAUTHORITY is on /config (often a host bind mount), move it to /tmp to avoid
 # libICE lock/link semantics failing on some FUSE-backed filesystems.
 if [ -n "${ICEAUTHORITY:-}" ] && printf '%s' "${ICEAUTHORITY}" | grep -q '^/config/'; then
@@ -35,6 +46,10 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
 
   if [ -e "${ICEAUTHORITY}" ]; then
     log "ICEAUTHORITY exists: $(ls -l "${ICEAUTHORITY}" 2>/dev/null || true)"
+
+    # Non-secret open test (does not read contents).
+    head -c 0 "${ICEAUTHORITY}" >/dev/null 2>&1
+    log "ICEAUTHORITY open-test rc=$?"
   else
     log "ICEAUTHORITY missing: ${ICEAUTHORITY}"
     touch "${ICEAUTHORITY}" 2>/dev/null || true
@@ -129,6 +144,13 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
       set -e
     fi
   fi
+fi
+
+if [ "${STEAM_DEBUG_STRACE_KSMSERVER:-0}" = "1" ] && command -v strace >/dev/null 2>&1; then
+  trace_out="/config/ksmserver.filestrace.log"
+  log "strace enabled: ${trace_out}"
+  # File-related syscalls only; avoid leaking authority contents.
+  exec strace -f -qq -o "${trace_out}" -s 0 -e trace=%file "${REAL_KSMSERVER}" "$@"
 fi
 
 exec "${REAL_KSMSERVER}" "$@"

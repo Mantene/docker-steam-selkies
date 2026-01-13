@@ -36,6 +36,7 @@ RUN \
   apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    strace \
     elogind \
     jq \
     kmod \
