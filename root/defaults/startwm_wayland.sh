@@ -207,7 +207,7 @@ export DISPLAY=""
 
 # Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
 export XAUTHORITY="$HOME/.Xauthority"
-export ICEAUTHORITY="${XDG_RUNTIME_DIR}/.ICEauthority"
+export ICEAUTHORITY="/tmp/.ICEauthority-abc"
 rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true

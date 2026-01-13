@@ -33,7 +33,11 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
         "localhost${DISPLAY:-}"; do
         [ -n "${netid}" ] || continue
         iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
-        iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" >/dev/null 2>&1
+        out_add="$(iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" 2>&1)"
+        rc_add=$?
+        if [ ${rc_add} -ne 0 ] && [ -n "${out_add}" ]; then
+          log "iceauth-add: rc=${rc_add} netid=${netid} out=${out_add}"
+        fi
       done
       rc=$?
       size="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
@@ -61,11 +65,14 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
           echo "quit"
         } >"${tmpcmd}" 2>/dev/null
 
-        iceauth -f "${ICEAUTHORITY}" <"${tmpcmd}" >/dev/null 2>&1
+        out2="$(iceauth -f "${ICEAUTHORITY}" <"${tmpcmd}" 2>&1)"
         rc2=$?
         rm -f "${tmpcmd}" >/dev/null 2>&1 || true
         size2="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
         log "ICEAUTHORITY stdin-seed rc=${rc2} size=${size2}"
+        if [ -n "${out2}" ]; then
+          log "iceauth-stdin: out=${out2}"
+        fi
       fi
 
       # Log a short listing (no secrets) so we can verify entries exist.
