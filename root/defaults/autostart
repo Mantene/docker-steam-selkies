@@ -1,3 +1,5 @@
+
+#!/bin/bash
 # Ensure Steam autostarts in KDE
 mkdir -p "$HOME/.config/autostart"
 cat > "$HOME/.config/autostart/steam.desktop" <<EOF
@@ -10,7 +12,6 @@ X-GNOME-Autostart-enabled=true
 Name=Steam
 Comment=Start Steam client
 EOF
-#!/bin/bash
 
 # Start Sunshine (GameStream server) in the background.
 if command -v sunshine >/dev/null 2>&1; then
