@@ -1,4 +1,3 @@
-
 #!/bin/bash
 # Ensure Steam autostarts in KDE
 mkdir -p "$HOME/.config/autostart"
