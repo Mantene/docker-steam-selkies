@@ -123,6 +123,7 @@ RUN chmod +x \
   /custom-cont-init.d/47-dbus-servicehelper-permissions.sh \
   /custom-cont-init.d/48-start-upower-udisks2.sh \
   /custom-cont-init.d/99-steam-selkies-autostart-migrate.sh \
+  /defaults/startwm_wayland.sh \
   /defaults/autostart
 
 ENTRYPOINT ["/init"]
