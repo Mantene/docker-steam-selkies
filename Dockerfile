@@ -97,8 +97,9 @@ RUN \
     /tmp/* \
     /var/tmp/*
 
+
 # add local files
-COPY /root /
+COPY root/ /root/
 
 RUN chmod +x \
   /usr/local/bin/elogind-wrapper \
@@ -110,7 +111,10 @@ RUN chmod +x \
   /etc/cont-init.d/45-selkies-wayland-socket-index.sh \
   /etc/cont-init.d/46-dbus-login1-override.sh \
   /etc/cont-init.d/47-dbus-servicehelper-permissions.sh \
-  /etc/cont-init.d/99-steam-selkies-autostart-migrate.sh
+  /etc/cont-init.d/99-steam-selkies-autostart-migrate.sh \
+  /root/defaults/autostart
+
+ENTRYPOINT ["/root/defaults/autostart"]
 
 # ports and volumes
 EXPOSE 3001 \
