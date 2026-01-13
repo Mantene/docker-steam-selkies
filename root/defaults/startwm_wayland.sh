@@ -32,10 +32,30 @@ log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${
 log "Env: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY:-}"
 ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
 
-# X11/ICE socket dirs: ideally root-owned, but some base setups clear /tmp.
-# Create them if missing so Xwayland can start; log ownership for debugging.
-mkdir -p /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
-chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+# Prefer a stable temp directory for KDE tooling.
+export TMPDIR="${TMPDIR:-/config/tmp}"
+mkdir -p "${TMPDIR}" >/dev/null 2>&1 || true
+chmod 1777 "${TMPDIR}" >/dev/null 2>&1 || true
+
+# X11/ICE socket dirs: Xwayland and KDE session pieces behave best when these
+# are root-owned 1777. Try to enforce that (root via sudo if available).
+fix_tmp_socket_dirs() {
+  mkdir -p /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+  chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+
+  if [ "$(id -u)" -eq 0 ]; then
+    rm -f /tmp/.X11-unix/X* /tmp/.ICE-unix/* >/dev/null 2>&1 || true
+    chown root:root /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+    chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -n sh -c 'mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && rm -f /tmp/.X11-unix/X* /tmp/.ICE-unix/* && chown root:root /tmp/.X11-unix /tmp/.ICE-unix && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix' >/dev/null 2>&1 || true
+  fi
+}
+
+fix_tmp_socket_dirs
 
 tmp_x11_owner="$(stat -c %U /tmp/.X11-unix 2>/dev/null || true)"
 tmp_ice_owner="$(stat -c %U /tmp/.ICE-unix 2>/dev/null || true)"
