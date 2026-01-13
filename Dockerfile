@@ -56,7 +56,9 @@ RUN \
     kde-spectacle \
     xinit \
     dbus-x11 \
-    weston && \
+    weston \
+    kwin-wayland \
+    plasma-workspace-wayland && \
   if [ -f /usr/bin/xterm ]; then chmod u-s /usr/bin/xterm || true; fi && \
   echo "**** ensure elogind daemon path ****" && \
   ELOGIND_DAEMON="" && \
