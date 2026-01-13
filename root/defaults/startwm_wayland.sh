@@ -207,7 +207,7 @@ export DISPLAY=""
 
 # Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
 export XAUTHORITY="$HOME/.Xauthority"
-export ICEAUTHORITY="$HOME/.ICEauthority"
+export ICEAUTHORITY="${XDG_RUNTIME_DIR}/.ICEauthority"
 rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
@@ -264,18 +264,50 @@ if [ -z "${display_num}" ]; then
     if command -v iceauth >/dev/null 2>&1; then
       ice_cookie="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || echo "" )"
       if [ -n "${ice_cookie}" ]; then
+        host="$(hostname 2>/dev/null || echo "")"
+        set +e
+
         # Try a couple of common network-id spellings.
         for netid in \
           "${DISPLAY}" \
           "unix${DISPLAY}" \
-          "unix/${DISPLAY}" \
-          "local${DISPLAY}" \
-          "local/${DISPLAY}" \
           "local/unix${DISPLAY}" \
-          "local/unix/${DISPLAY}"; do
-          iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1 || true
-          iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${ice_cookie}" >/dev/null 2>&1 || true
+          "local/${DISPLAY}" \
+          "${host}/unix${DISPLAY}" \
+          "${host}${DISPLAY}" \
+          "localhost/unix${DISPLAY}" \
+          "localhost${DISPLAY}"; do
+          [ -n "${netid}" ] || continue
+          iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
+          iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${ice_cookie}" >/dev/null 2>&1
         done
+
+        # Some iceauth builds don't support the CLI subcommand form reliably.
+        # If the file is still empty, feed commands on stdin.
+        if [ ! -s "${ICEAUTHORITY}" ]; then
+          tmpcmd="${TMPDIR:-/tmp}/iceauth.cmd.$$"
+          {
+            for netid in \
+              "${DISPLAY}" \
+              "unix${DISPLAY}" \
+              "local/unix${DISPLAY}" \
+              "local/${DISPLAY}" \
+              "${host}/unix${DISPLAY}" \
+              "${host}${DISPLAY}" \
+              "localhost/unix${DISPLAY}" \
+              "localhost${DISPLAY}"; do
+              [ -n "${netid}" ] || continue
+              echo "remove ICE ${netid} MIT-MAGIC-COOKIE-1"
+              echo "add ICE ${netid} MIT-MAGIC-COOKIE-1 ${ice_cookie}"
+            done
+            echo "quit"
+          } >"${tmpcmd}" 2>/dev/null
+
+          iceauth -f "${ICEAUTHORITY}" <"${tmpcmd}" >/dev/null 2>&1
+          rm -f "${tmpcmd}" >/dev/null 2>&1 || true
+        fi
+
+        set -e
       fi
     fi
 

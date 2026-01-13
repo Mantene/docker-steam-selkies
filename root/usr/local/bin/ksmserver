@@ -20,16 +20,71 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
   if [ ! -s "${ICEAUTHORITY}" ] && command -v iceauth >/dev/null 2>&1; then
     cookie="$( (command -v mcookie >/dev/null 2>&1 && mcookie) || (openssl rand -hex 16 2>/dev/null) || echo "" )"
     if [ -n "${cookie}" ]; then
+      set +e
+      host="$(hostname 2>/dev/null || echo "")"
       for netid in \
         "${DISPLAY:-}" \
         "unix${DISPLAY:-}" \
         "local/unix${DISPLAY:-}" \
-        "local/${DISPLAY:-}"; do
+        "local/${DISPLAY:-}" \
+        "${host}/unix${DISPLAY:-}" \
+        "${host}${DISPLAY:-}" \
+        "localhost/unix${DISPLAY:-}" \
+        "localhost${DISPLAY:-}"; do
         [ -n "${netid}" ] || continue
-        iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1 || true
-        iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" >/dev/null 2>&1 || true
+        iceauth -f "${ICEAUTHORITY}" remove ICE "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
+        iceauth -f "${ICEAUTHORITY}" add ICE "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" >/dev/null 2>&1
       done
-      log "ICEAUTHORITY seeded (size now: $(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0))"
+      rc=$?
+      size="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
+      log "ICEAUTHORITY seed attempt rc=${rc} size=${size}"
+
+      # Some builds of iceauth don't support the CLI subcommand form reliably.
+      # If the file is still empty, fall back to feeding commands on stdin.
+      if [ "${size}" = "0" ]; then
+        tmpcmd="${TMPDIR:-/tmp}/iceauth.cmd.$$"
+        {
+          for netid in \
+            "${DISPLAY:-}" \
+            "unix${DISPLAY:-}" \
+            "local/unix${DISPLAY:-}" \
+            "local/${DISPLAY:-}" \
+            "${host}/unix${DISPLAY:-}" \
+            "${host}${DISPLAY:-}" \
+            "localhost/unix${DISPLAY:-}" \
+            "localhost${DISPLAY:-}"; do
+            [ -n "${netid}" ] || continue
+            echo "remove ICE ${netid} MIT-MAGIC-COOKIE-1"
+            echo "add ICE ${netid} MIT-MAGIC-COOKIE-1 ${cookie}"
+          done
+          echo "list"
+          echo "quit"
+        } >"${tmpcmd}" 2>/dev/null
+
+        iceauth -f "${ICEAUTHORITY}" <"${tmpcmd}" >/dev/null 2>&1
+        rc2=$?
+        rm -f "${tmpcmd}" >/dev/null 2>&1 || true
+        size2="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
+        log "ICEAUTHORITY stdin-seed rc=${rc2} size=${size2}"
+      fi
+
+      # Log a short listing (no secrets) so we can verify entries exist.
+      list_out="$(iceauth -f "${ICEAUTHORITY}" list 2>/dev/null | head -n 5)"
+      if [ -z "${list_out}" ]; then
+        log "iceauth-list: (empty)"
+      else
+        printf '%s\n' "${list_out}" | while IFS= read -r line; do
+          # Expected format: ICE <netid> MIT-MAGIC-COOKIE-1 <cookie>
+          set -- ${line}
+          if [ "$#" -ge 3 ]; then
+            log "iceauth-list: $1 $2 $3 ***"
+          else
+            log "iceauth-list: ${line}"
+          fi
+        done
+      fi
+
+      set -e
     fi
   fi
 fi
