@@ -134,6 +134,12 @@ RUN chmod +x \
   /defaults/startwm_wayland.sh \
   /defaults/autostart
 
+# Ensure any absolute-path ksmserver launch uses our wrapper.
+RUN if [ -x /usr/bin/ksmserver ] && [ ! -e /usr/bin/ksmserver.real ]; then \
+    mv /usr/bin/ksmserver /usr/bin/ksmserver.real; \
+    ln -sf /usr/local/bin/ksmserver /usr/bin/ksmserver; \
+  fi
+
 ENTRYPOINT ["/init"]
 
 # ports and volumes

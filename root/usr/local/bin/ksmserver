@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+REAL_KSMSERVER="/usr/bin/ksmserver"
+if [ -x /usr/bin/ksmserver.real ]; then
+  REAL_KSMSERVER="/usr/bin/ksmserver.real"
+fi
+
 log() {
   echo "[steam-selkies][wrap:ksmserver] $*" >>/config/steam-selkies.log 2>/dev/null || true
 }
@@ -64,8 +69,8 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
         size_seed="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
 
         log "ICEAUTHORITY seed ${mode} rc=${rc_seed} size=${size_seed}"
-        if [ -n "${out_seed}" ]; then
-          # Keep it single-line-ish.
+        # Do NOT log successful output: it contains cookie material.
+        if [ -n "${out_seed}" ] && { [ ${rc_seed} -ne 0 ] || [ "${size_seed}" = "0" ]; }; then
           log "iceauth-${mode}: out=$(printf '%s' "${out_seed}" | tr '\n' ' ' | head -c 400)"
         fi
 
@@ -104,4 +109,4 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
   fi
 fi
 
-exec /usr/bin/ksmserver "$@"
+exec "${REAL_KSMSERVER}" "$@"

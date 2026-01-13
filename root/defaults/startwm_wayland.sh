@@ -193,6 +193,9 @@ if ! can_write "${kde_log}"; then
   kde_log=/tmp/kde-plasma-xwayland.log
 fi
 
+# Start each boot with a fresh KDE log to avoid chasing stale errors.
+: >"${kde_log}" 2>/dev/null || true
+
 if ! command -v Xwayland >/dev/null 2>&1; then
   log "ERROR: Xwayland not found in image; cannot start Plasma X11 in Wayland mode"
   exit 1
@@ -207,7 +210,7 @@ export DISPLAY=""
 
 # Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
 export XAUTHORITY="$HOME/.Xauthority"
-export ICEAUTHORITY="/tmp/.ICEauthority-abc"
+export ICEAUTHORITY="$HOME/.ICEauthority"
 rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
