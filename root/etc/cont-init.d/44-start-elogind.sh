@@ -33,11 +33,25 @@ for p in \
 	/libexec/elogind/elogind \
 	/usr/sbin/elogind \
 	/usr/bin/elogind; do
-	if [ -x "${p}" ] && [ ! -d "${p}" ]; then
+	if [ -x "${p}" ] && [ -f "${p}" ]; then
 		echo "[steam-selkies] Starting elogind via ${p}"
 		"${p}" &
 		exit 0
 	fi
 done
+
+# Fallback: ask dpkg where the package installed the daemon.
+if command -v dpkg-query >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; then
+	if dpkg-query -W -f='${Status}' elogind 2>/dev/null | grep -q "installed"; then
+		while IFS= read -r p; do
+			[ -n "${p}" ] || continue
+			if [ -x "${p}" ] && [ -f "${p}" ] && echo "${p}" | grep -Eq '/elogind$'; then
+				echo "[steam-selkies] Starting elogind via ${p} (dpkg -L)"
+				"${p}" &
+				exit 0
+			fi
+		done < <(dpkg -L elogind 2>/dev/null || true)
+	fi
+fi
 
 echo "[steam-selkies] WARNING: elogind not found; login1 may be unavailable" >&2

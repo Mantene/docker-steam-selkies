@@ -120,6 +120,7 @@ RUN chmod +x \
   /custom-cont-init.d/45-selkies-wayland-socket-index.sh \
   /custom-cont-init.d/46-dbus-login1-override.sh \
   /custom-cont-init.d/47-dbus-servicehelper-permissions.sh \
+  /custom-cont-init.d/48-start-upower-udisks2.sh \
   /custom-cont-init.d/99-steam-selkies-autostart-migrate.sh \
   /defaults/autostart
 
