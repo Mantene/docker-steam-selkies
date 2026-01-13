@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+# Wrapper used by KDE's startplasma-x11 via KDEWM.
+# Forces KWin to replace any existing window manager (e.g., Openbox).
+exec /usr/bin/kwin_x11 --replace "$@"

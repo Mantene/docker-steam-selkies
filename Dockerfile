@@ -111,6 +111,7 @@ COPY root/etc/cont-init.d/ /custom-cont-init.d/
 # set permissions
 RUN chmod +x \
   /usr/local/bin/elogind-wrapper \
+  /usr/local/bin/kwin_x11_replace \
   /usr/local/bin/org.freedesktop.login1 \
   /usr/local/bin/selkies-smoke-test \
   /usr/local/bin/steam-selkies \

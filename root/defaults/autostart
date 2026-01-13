@@ -3,6 +3,10 @@
 ## steam-selkies-managed:desktop=kde
 
 echo "[steam-selkies] autostart: attempting to launch KDE (DISPLAY=${DISPLAY-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY-})" >>/config/steam-selkies.log 2>&1 || true
+
+log() {
+  echo "[steam-selkies] $*" >>/config/steam-selkies.log 2>&1 || true
+}
 # Ensure Steam autostarts in KDE
 mkdir -p "$HOME/.config/autostart"
 cat > "$HOME/.config/autostart/steam.desktop" <<EOF
@@ -39,29 +43,40 @@ if command -v startplasma-x11 >/dev/null 2>&1; then
   fi
 
   if [ -n "${DISPLAY-}" ]; then
-    # Prevent repeated attempts.
-    if [ ! -f /tmp/steam-selkies-kde-started ]; then
-      : > /tmp/steam-selkies-kde-started 2>/dev/null || true
+    # Prevent repeated attempts (Openbox may re-run autostart on reload).
+    if [ -f /tmp/steam-selkies-kde-started ]; then
+      log "KDE launch already attempted; skipping"
+      exit 0
+    fi
+    : > /tmp/steam-selkies-kde-started 2>/dev/null || true
 
-      # If Openbox is the running WM, KWin won't start until Openbox is gone.
-      # Terminate Openbox and then start Plasma as the desktop session.
-      if pgrep -x openbox >/dev/null 2>&1; then
-        echo "[steam-selkies] stopping openbox to allow KWin" >>/config/steam-selkies.log 2>&1 || true
-        pkill -TERM -x openbox >/dev/null 2>&1 || true
-        sleep 1
-      fi
+    kde_log=/config/kde-plasma.log
+    log "Launching Plasma (X11) in background; logs -> ${kde_log}"
 
-      echo "[steam-selkies] launching startplasma-x11 (DISPLAY=${DISPLAY})" >>/config/steam-selkies.log 2>&1 || true
-      if command -v dbus-run-session >/dev/null 2>&1; then
-        exec dbus-run-session -- startplasma-x11
-      fi
-      if command -v dbus-launch >/dev/null 2>&1; then
+    # Force KWin to replace Openbox rather than refusing to start.
+    if [ -x /usr/local/bin/kwin_x11_replace ]; then
+      KDEWM=/usr/local/bin/kwin_x11_replace
+      export KDEWM
+      log "Set KDEWM=${KDEWM}"
+    else
+      log "WARNING: /usr/local/bin/kwin_x11_replace not found; KWin may not replace Openbox"
+    fi
+
+    if command -v dbus-run-session >/dev/null 2>&1; then
+      (dbus-run-session -- startplasma-x11 >>"${kde_log}" 2>&1) &
+      exit 0
+    fi
+    if command -v dbus-launch >/dev/null 2>&1; then
+      (
         eval "$(dbus-launch --sh-syntax)"
         export DBUS_SESSION_BUS_ADDRESS
         exec startplasma-x11
-      fi
-      exec startplasma-x11
+      ) >>"${kde_log}" 2>&1 &
+      exit 0
     fi
+
+    (startplasma-x11 >>"${kde_log}" 2>&1) &
+    exit 0
   fi
 fi
 
