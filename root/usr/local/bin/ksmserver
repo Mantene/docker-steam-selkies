@@ -20,6 +20,19 @@ if [ -n "${ICEAUTHORITY:-}" ] && printf '%s' "${ICEAUTHORITY}" | grep -q '^/conf
 fi
 
 if [ -n "${ICEAUTHORITY:-}" ]; then
+  # Clear potential stale lock/temp files used by libICE/Xau locking.
+  rm -f "${ICEAUTHORITY}-c" "${ICEAUTHORITY}-l" "${ICEAUTHORITY}.c" "${ICEAUTHORITY}.l" >/dev/null 2>&1 || true
+
+  # Sanity check: can we create sibling files next to ICEAUTHORITY?
+  ice_dir="$(dirname "${ICEAUTHORITY}")"
+  testfile="${ice_dir}/.iceauth-write-test.$$"
+  ( : >"${testfile}" ) >/dev/null 2>&1
+  rc_touch=$?
+  rm -f "${testfile}" >/dev/null 2>&1 || true
+  if [ ${rc_touch} -ne 0 ]; then
+    log "WARNING: cannot create files in ${ice_dir} (rc=${rc_touch}); libICE locking may fail"
+  fi
+
   if [ -e "${ICEAUTHORITY}" ]; then
     log "ICEAUTHORITY exists: $(ls -l "${ICEAUTHORITY}" 2>/dev/null || true)"
   else
@@ -110,6 +123,8 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
           fi
         done
       fi
+
+      log "ICEAUTHORITY final: $(ls -l "${ICEAUTHORITY}" 2>/dev/null || true)"
 
       set -e
     fi

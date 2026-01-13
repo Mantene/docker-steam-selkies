@@ -148,6 +148,12 @@ fix_tmp_socket_dirs() {
 
 fix_tmp_socket_dirs
 
+# Ensure /tmp itself has standard permissions (some container setups tighten this).
+chmod 1777 /tmp >/dev/null 2>&1 || true
+if [ "$(id -u)" -eq 0 ]; then
+  chown root:root /tmp >/dev/null 2>&1 || true
+fi
+
 tmp_x11_owner="$(stat -c %U /tmp/.X11-unix 2>/dev/null || true)"
 tmp_ice_owner="$(stat -c %U /tmp/.ICE-unix 2>/dev/null || true)"
 if [ "${tmp_x11_owner}" != "root" ] || [ "${tmp_ice_owner}" != "root" ]; then
@@ -214,9 +220,16 @@ export XAUTHORITY="$HOME/.Xauthority"
 # IMPORTANT: put ICEAUTHORITY on a local filesystem (e.g., /tmp). Some hosts (notably Unraid
 # user shares) can be FUSE-backed and may not support the link/lock semantics libICE uses.
 export ICEAUTHORITY="/tmp/.ICEauthority-abc"
-rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
+rm -f "${XAUTHORITY}" "${ICEAUTHORITY}" \
+  "${ICEAUTHORITY}-c" "${ICEAUTHORITY}-l" \
+  "${ICEAUTHORITY}.c" "${ICEAUTHORITY}.l" >/dev/null 2>&1 || true
 touch "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
 chmod 600 "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
+
+# Some components ignore ICEAUTHORITY and hardcode ~/.ICEauthority.
+# Point that at the local /tmp authority file to avoid FUSE/locking issues.
+rm -f "$HOME/.ICEauthority" >/dev/null 2>&1 || true
+ln -sf "${ICEAUTHORITY}" "$HOME/.ICEauthority" >/dev/null 2>&1 || true
 
 if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
   chown abc:users "${XAUTHORITY}" "${ICEAUTHORITY}" >/dev/null 2>&1 || true
