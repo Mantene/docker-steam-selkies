@@ -22,58 +22,59 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
     if [ -n "${cookie}" ]; then
       set +e
       host="$(hostname 2>/dev/null || echo "")"
-      for netid in \
-        "${DISPLAY:-}" \
-        "unix${DISPLAY:-}" \
-        "local/unix${DISPLAY:-}" \
-        "local/${DISPLAY:-}" \
-        "${host}/unix${DISPLAY:-}" \
-        "${host}${DISPLAY:-}" \
-        "localhost/unix${DISPLAY:-}" \
-        "localhost${DISPLAY:-}"; do
-        [ -n "${netid}" ] || continue
-        iceauth -f "${ICEAUTHORITY}" remove "${netid}" MIT-MAGIC-COOKIE-1 >/dev/null 2>&1
-        out_add="$(iceauth -f "${ICEAUTHORITY}" add "${netid}" MIT-MAGIC-COOKIE-1 "${cookie}" 2>&1)"
-        rc_add=$?
-        if [ ${rc_add} -ne 0 ] && [ -n "${out_add}" ]; then
-          log "iceauth-add: rc=${rc_add} netid=${netid} out=${out_add}"
-        fi
-      done
-      rc=$?
-      size="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
-      log "ICEAUTHORITY seed attempt rc=${rc} size=${size}"
+      netids=(
+        "${DISPLAY:-}"
+        "unix${DISPLAY:-}"
+        "local/unix${DISPLAY:-}"
+        "local/${DISPLAY:-}"
+        "${host}/unix${DISPLAY:-}"
+        "${host}${DISPLAY:-}"
+        "localhost/unix${DISPLAY:-}"
+        "localhost${DISPLAY:-}"
+      )
 
-      # Some builds of iceauth don't support the CLI subcommand form reliably.
-      # If the file is still empty, fall back to feeding commands on stdin.
-      if [ "${size}" = "0" ]; then
+      try_seed() {
+        local mode="$1" # label
+        local protocol_name="$2" # e.g. ICE
+        local protocol_data="$3" # e.g. 0 or 1
+        local prefix_0x="$4" # either "0x" or ""
+        local tmpcmd
+
         tmpcmd="${TMPDIR:-/tmp}/iceauth.cmd.$$"
         {
-          for netid in \
-            "${DISPLAY:-}" \
-            "unix${DISPLAY:-}" \
-            "local/unix${DISPLAY:-}" \
-            "local/${DISPLAY:-}" \
-            "${host}/unix${DISPLAY:-}" \
-            "${host}${DISPLAY:-}" \
-            "localhost/unix${DISPLAY:-}" \
-            "localhost${DISPLAY:-}"; do
+          for netid in "${netids[@]}"; do
             [ -n "${netid}" ] || continue
-            echo "remove ${netid} MIT-MAGIC-COOKIE-1"
-            echo "add ${netid} MIT-MAGIC-COOKIE-1 ${cookie}"
+            # Per iceauth(1): add protocol_name protocol_data netid authname authdata
+            echo "remove ${protocol_name} ${protocol_data} ${netid} MIT-MAGIC-COOKIE-1"
+            echo "add ${protocol_name} ${protocol_data} ${netid} MIT-MAGIC-COOKIE-1 ${prefix_0x}${cookie}"
           done
           echo "list"
           echo "quit"
         } >"${tmpcmd}" 2>/dev/null
 
-        out2="$(iceauth -f "${ICEAUTHORITY}" <"${tmpcmd}" 2>&1)"
-        rc2=$?
+        out_seed="$(iceauth -f "${ICEAUTHORITY}" <"${tmpcmd}" 2>&1)"
+        rc_seed=$?
         rm -f "${tmpcmd}" >/dev/null 2>&1 || true
-        size2="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
-        log "ICEAUTHORITY stdin-seed rc=${rc2} size=${size2}"
-        if [ -n "${out2}" ]; then
-          log "iceauth-stdin: out=${out2}"
+        size_seed="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
+
+        log "ICEAUTHORITY seed ${mode} rc=${rc_seed} size=${size_seed}"
+        if [ -n "${out_seed}" ]; then
+          # Keep it single-line-ish.
+          log "iceauth-${mode}: out=$(printf '%s' "${out_seed}" | tr '\n' ' ' | head -c 400)"
         fi
-      fi
+
+        [ "${size_seed}" != "0" ]
+        return $?
+      }
+
+      # Try multiple syntaxes. Stop as soon as the file becomes non-empty.
+      size0="$(stat -c %s "${ICEAUTHORITY}" 2>/dev/null || echo 0)"
+      log "ICEAUTHORITY before-seed size=${size0}"
+
+      try_seed "stdin-ICE-0" "ICE" "0" "" || \
+      try_seed "stdin-ICE-0-0x" "ICE" "0" "0x" || \
+      try_seed "stdin-ICE-1" "ICE" "1" "" || \
+      try_seed "stdin-ICE-1-0x" "ICE" "1" "0x" || true
 
       # Log a short listing (no secrets) so we can verify entries exist.
       list_out="$(iceauth -f "${ICEAUTHORITY}" list 2>/dev/null | head -n 5)"
@@ -81,10 +82,10 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
         log "iceauth-list: (empty)"
       else
         printf '%s\n' "${list_out}" | while IFS= read -r line; do
-          # Expected format: ICE <netid> MIT-MAGIC-COOKIE-1 <cookie>
+          # Expected format: <protocol_name> <protocol_data> <netid> <authname> <authdata>
           set -- ${line}
-          if [ "$#" -ge 3 ]; then
-            log "iceauth-list: $1 $2 $3 ***"
+          if [ "$#" -ge 4 ]; then
+            log "iceauth-list: $1 $2 $3 $4 ***"
           else
             log "iceauth-list: ${line}"
           fi
