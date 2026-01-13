@@ -32,16 +32,15 @@ log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${
 log "Env: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY:-}"
 ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
 
-# X11/ICE socket dirs must be root-owned (cont-init enforces that).
-if [ ! -d /tmp/.X11-unix ] || [ ! -d /tmp/.ICE-unix ]; then
-  log "ERROR: /tmp/.X11-unix or /tmp/.ICE-unix missing; init script should create them"
-  ls -ld /tmp /tmp/.X11-unix /tmp/.ICE-unix 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
-  exit 1
-fi
+# X11/ICE socket dirs: ideally root-owned, but some base setups clear /tmp.
+# Create them if missing so Xwayland can start; log ownership for debugging.
+mkdir -p /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix >/dev/null 2>&1 || true
+
 tmp_x11_owner="$(stat -c %U /tmp/.X11-unix 2>/dev/null || true)"
 tmp_ice_owner="$(stat -c %U /tmp/.ICE-unix 2>/dev/null || true)"
 if [ "${tmp_x11_owner}" != "root" ] || [ "${tmp_ice_owner}" != "root" ]; then
-  log "WARNING: /tmp socket dirs not root-owned (X11=${tmp_x11_owner} ICE=${tmp_ice_owner}); Xwayland/ksmserver may fail"
+  log "WARNING: /tmp socket dirs not root-owned (X11=${tmp_x11_owner} ICE=${tmp_ice_owner}); warnings are expected"
 fi
 
 # Start Sunshine early (doesn't require WM)
