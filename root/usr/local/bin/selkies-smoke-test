@@ -76,16 +76,18 @@ exec env \
   xterm -title "Selkies Smoke Test" -geometry 120x40+40+40 -bg "#ffcc00" -fg "#000000" -fa "Monospace" -fs 18 \
     -e bash -lc 'echo "SELKIES SMOKE TEST"; echo; echo "If you can see this big yellow window updating once per second, capture is working and this is not a codec problem."; echo; echo "Close this window when done."; echo; while true; do date; sleep 1; clear; done'
 SH
-  chmod +x "${runner}" >/dev/null 2>&1 || true
+  # mktemp creates 0600 by default; make it readable for the target user (abc).
+  # Execute via bash to avoid /tmp being mounted with noexec in some environments.
+  chmod 0644 "${runner}" >/dev/null 2>&1 || true
 
   # Run in background; make it visually obvious in the stream.
   (
     echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-}) (continuous redraw)";
     if [ -n "${launch_as_user}" ]; then
-      su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' HOME='${HOME-}' ${runner}";
+      su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' HOME='${HOME-}' bash '${runner}'";
       echo "steam-selkies: xterm (as ${launch_as_user}) exited rc=$?";
     else
-      "${runner}"
+      bash "${runner}"
       echo "steam-selkies: xterm exited rc=$?";
     fi
     rm -f "${runner}" >/dev/null 2>&1 || true
