@@ -134,6 +134,10 @@ export PATH="/usr/local/bin:${PATH}"
 
 ensure_log_writable
 
+# Bump this when changing startup semantics so logs can confirm which script is running.
+SCRIPT_VERSION="2026-01-14-1"
+log "Script version: ${SCRIPT_VERSION}"
+
 # Xwayland must connect to the *compositor's* Wayland socket.
 # Some setups expose multiple wayland-* sockets; pick one that is actually connectable.
 wayland_can_connect() {
@@ -238,8 +242,11 @@ if [ -S "${selkies_wayland_socket}" ]; then
   log "Selkies socket: present at ${selkies_wayland_socket}"
   # Give the compositor a moment to become connectable.
   # (Socket existence is not enough; connection may still be refused early in boot.)
+  # Default to 20s; can be tuned via STEAM_WAYLAND_CONNECT_WAIT_SECS.
+  wait_secs="${STEAM_WAYLAND_CONNECT_WAIT_SECS:-20}"
+  max_tries=$((wait_secs * 10))
   j=0
-  while [ $j -lt 50 ]; do
+  while [ $j -lt ${max_tries} ]; do
     out="$(wayland_can_connect "${selkies_wayland_socket}" 2>&1)"
     if [ $? -eq 0 ]; then
       break
@@ -247,8 +254,10 @@ if [ -S "${selkies_wayland_socket}" ]; then
     j=$((j + 1))
     sleep 0.1
   done
-  if [ $j -ge 50 ]; then
-    log "WARNING: Wayland socket exists but is not connectable yet: ${selkies_wayland_socket} (${out:-unknown error})"
+  if [ $j -ge ${max_tries} ]; then
+    log "ERROR: Wayland socket exists but is not connectable after ${wait_secs}s: ${selkies_wayland_socket} (${out:-unknown error})"
+    log "Refusing to start Xwayland/Plasma against a non-ready compositor (prevents black screen / dead DISPLAY)."
+    exit 1
   fi
 else
   log "WARNING: Selkies socket not present at ${selkies_wayland_socket} (continuing; Xwayland may fail)"

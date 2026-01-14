@@ -48,14 +48,15 @@ if command -v xterm >/dev/null 2>&1; then
     launch_as_user="abc"
   fi
 
-  # Run in background; keep it visible without stealing focus too aggressively.
+  # Run in background; make it visually obvious in the stream.
   (
     echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-})";
     if [ -n "${launch_as_user}" ]; then
-        su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' WAYLAND_DISPLAY='${WAYLAND_DISPLAY-}' xterm -title 'Selkies Smoke Test' -geometry 90x24 -e bash -lc 'echo \"Selkies smoke test: if you can see this window, capture+streaming is working.\"; echo; echo \"Close this window when done.\"; exec bash'";
+        su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' xterm -title 'Selkies Smoke Test' -geometry 120x40+40+40 -bg '#ffcc00' -fg '#000000' -fa 'Monospace' -fs 18 -e bash -lc 'echo \"SELKIES SMOKE TEST\"; echo; echo \"If you can see this big yellow window, Xwayland surfaces are visible to the Wayland compositor (capture should NOT be black).\"; echo; echo \"DISPLAY='\"\"${DISPLAY-}\"\"\"; XDG_RUNTIME_DIR='\"\"${XDG_RUNTIME_DIR-}\"\"\"\"; echo; echo \"Close this window when done.\"; exec bash'";
       echo "steam-selkies: xterm (as ${launch_as_user}) exited rc=$?";
     else
-      xterm -title "Selkies Smoke Test" -geometry 90x24 -e bash -lc 'echo "Selkies smoke test: if you can see this window, capture+streaming is working."; echo; echo "Close this window when done."; exec bash'
+      xterm -title "Selkies Smoke Test" -geometry 120x40+40+40 -bg "#ffcc00" -fg "#000000" -fa "Monospace" -fs 18 \
+        -e bash -lc 'echo "SELKIES SMOKE TEST"; echo; echo "If you can see this big yellow window, Xwayland surfaces are visible to the Wayland compositor (capture should NOT be black)."; echo; echo "Close this window when done."; exec bash'
       echo "steam-selkies: xterm exited rc=$?";
     fi
   ) >>"${log_file}" 2>&1 &
