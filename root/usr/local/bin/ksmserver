@@ -10,6 +10,8 @@ log() {
   echo "[steam-selkies][wrap:ksmserver] $*" >>/config/steam-selkies.log 2>/dev/null || true
 }
 
+log "wrapper_version=2026-01-13"
+
 log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} ICEAUTHORITY=${ICEAUTHORITY:-} XAUTHORITY=${XAUTHORITY:-}"
 
 if [ -n "${HOME:-}" ]; then
@@ -149,17 +151,33 @@ fi
 if [ "${STEAM_DEBUG_STRACE_KSMSERVER:-0}" = "1" ] && command -v strace >/dev/null 2>&1; then
   trace_out="/config/ksmserver.filestrace.log"
   log "strace enabled: ${trace_out}"
-  # File-related syscalls only; avoid leaking authority contents.
-  strace -f -qq -o "${trace_out}" -s 0 -e trace=%file "${REAL_KSMSERVER}" "$@"
+  # NOTE: ksmserver commonly exits non-zero when it fails; with `set -e` we must
+  # not abort before we can extract the relevant syscalls from the trace.
+  set +e
+  # File/process/network syscalls only; avoid leaking authority contents.
+  # `network` helps catch ICE unix socket connect/bind failures.
+  strace -f -qq -o "${trace_out}" -s 0 -e trace=file,process,network "${REAL_KSMSERVER}" "$@"
   rc=$?
+  set -e
 
   # Pull out ICE-relevant operations for quick diagnosis.
   if [ -r "${trace_out}" ]; then
-    grep -E "(/tmp/\.ICEauthority-abc|/config/\.ICEauthority|/tmp/\.ICE-unix|/tmp/\.ICEauthority|\.ICEauthority)" "${trace_out}" \
-      | head -n 200 \
-      | while IFS= read -r line; do
-          log "strace-ice: ${line}"
-        done
+    # Pull out the most relevant ops for ICE/X11 auth and sockets.
+    # (Broad match on purpose; still limited to file/process/network syscalls.)
+    set +e
+    matches="$(grep -Ei "(ICEauthority|\\.ICEauthority|ICE-unix|\\.ICE-unix|/tmp/\\.X11-unix|Xauthority|\\.Xauthority|Xau|MIT-MAGIC-COOKIE)" "${trace_out}" | head -n 400)"
+    rc_grep=$?
+    set -e
+
+    if [ ${rc_grep} -ne 0 ] || [ -z "${matches}" ]; then
+      log "strace-ice: (no matches in trace; inspect ${trace_out})"
+    else
+      printf '%s\n' "${matches}" | while IFS= read -r line; do
+        log "strace-ice: ${line}"
+      done
+    fi
+  else
+    log "strace-ice: (trace not readable: ${trace_out})"
   fi
 
   exit ${rc}
