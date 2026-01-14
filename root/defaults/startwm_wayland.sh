@@ -25,7 +25,9 @@ abc_env_args() {
   # Build a stable set of env vars so user-switch tools can't silently reset HOME/auth paths.
   # Intentionally do not include WAYLAND_DISPLAY here; it may be unset for Plasma X11.
   local home="${HOME:-/config}"
-  local runtime="${XDG_RUNTIME_DIR:-/config/.XDG}"
+  # XDG_RUNTIME_DIR should be on a local/ephemeral filesystem; keeping it on /config
+  # (host bind mounts / FUSE) can break atomic temp/lock behavior used by Qt/libICE.
+  local runtime="${XDG_RUNTIME_DIR:-/tmp/.XDG}"
   local tmp="${TMPDIR:-/config/tmp}"
   local xauth="${XAUTHORITY:-${home}/.Xauthority}"
   local iceauth="${ICEAUTHORITY:-${home}/.ICEauthority}"
@@ -102,8 +104,8 @@ ensure_log_writable
 # Selkies conventions: compositor socket is typically wayland-1
 export WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1}
 
-# Runtime dir: base images commonly use /config/.XDG
-export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/config/.XDG}
+# Runtime dir: must be local/ephemeral (not /config) for Qt/libICE atomic temp+lock usage.
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/.XDG}
 mkdir -p "${XDG_RUNTIME_DIR}" || true
 chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
 

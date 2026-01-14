@@ -12,7 +12,17 @@ log() {
 
 log "wrapper_version=2026-01-13"
 
-log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} ICEAUTHORITY=${ICEAUTHORITY:-} XAUTHORITY=${XAUTHORITY:-}"
+log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} ICEAUTHORITY=${ICEAUTHORITY:-} XAUTHORITY=${XAUTHORITY:-}"
+
+# XDG_RUNTIME_DIR should be on a local/ephemeral filesystem; /config can be a host bind
+# mount or FUSE, which breaks atomic temp+lock behavior used by Qt/libICE (seen as
+# EACCES on /config/.XDG/iceauth_* leading to SIGABRT).
+if [ -z "${XDG_RUNTIME_DIR:-}" ] || printf '%s' "${XDG_RUNTIME_DIR}" | grep -q '^/config/'; then
+  export XDG_RUNTIME_DIR="/tmp/.XDG"
+fi
+
+mkdir -p "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
 
 if [ -n "${HOME:-}" ]; then
   if [ -e "${HOME}/.ICEauthority" ] || [ -L "${HOME}/.ICEauthority" ]; then
