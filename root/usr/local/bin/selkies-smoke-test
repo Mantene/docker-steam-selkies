@@ -50,13 +50,13 @@ if command -v xterm >/dev/null 2>&1; then
 
   # Run in background; make it visually obvious in the stream.
   (
-    echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-})";
+    echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-}) (continuous redraw)";
     if [ -n "${launch_as_user}" ]; then
-        su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' xterm -title 'Selkies Smoke Test' -geometry 120x40+40+40 -bg '#ffcc00' -fg '#000000' -fa 'Monospace' -fs 18 -e bash -lc 'echo \"SELKIES SMOKE TEST\"; echo; echo \"If you can see this big yellow window, Xwayland surfaces are visible to the Wayland compositor (capture should NOT be black).\"; echo; echo \"DISPLAY='\"\"${DISPLAY-}\"\"\"; XDG_RUNTIME_DIR='\"\"${XDG_RUNTIME_DIR-}\"\"\"\"; echo; echo \"Close this window when done.\"; exec bash'";
+        su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' xterm -title 'Selkies Smoke Test' -geometry 120x40+40+40 -bg '#ffcc00' -fg '#000000' -fa 'Monospace' -fs 18 -e bash -lc 'echo \"SELKIES SMOKE TEST\"; echo; echo \"If you can see this big yellow window updating once per second, capture is working and this is not a codec problem.\"; echo; echo \"DISPLAY='\"\"${DISPLAY-}\"\"\"; XDG_RUNTIME_DIR='\"\"${XDG_RUNTIME_DIR-}\"\"\"\"; echo; echo \"Close this window when done.\"; echo; while true; do date; sleep 1; clear; done'";
       echo "steam-selkies: xterm (as ${launch_as_user}) exited rc=$?";
     else
       xterm -title "Selkies Smoke Test" -geometry 120x40+40+40 -bg "#ffcc00" -fg "#000000" -fa "Monospace" -fs 18 \
-        -e bash -lc 'echo "SELKIES SMOKE TEST"; echo; echo "If you can see this big yellow window, Xwayland surfaces are visible to the Wayland compositor (capture should NOT be black)."; echo; echo "Close this window when done."; exec bash'
+        -e bash -lc 'echo "SELKIES SMOKE TEST"; echo; echo "If you can see this big yellow window updating once per second, capture is working and this is not a codec problem."; echo; echo "Close this window when done."; echo; while true; do date; sleep 1; clear; done'
       echo "steam-selkies: xterm exited rc=$?";
     fi
   ) >>"${log_file}" 2>&1 &
