@@ -275,10 +275,7 @@ if [ $rc -ne 0 ]; then
   log "WARNING: Could not write $HOME/.config/autostart/steam.desktop (permission denied?). Continuing without it."
 fi
 
-# Optional: smoke test window (no-op unless STEAM_DEBUG_SMOKE_TEST=true)
-if command -v selkies-smoke-test >/dev/null 2>&1; then
-  selkies-smoke-test || true
-fi
+
 
 kde_log=/config/kde-plasma-xwayland.log
 if ! can_write "${kde_log}"; then
@@ -299,7 +296,15 @@ if ! command -v startplasma-x11 >/dev/null 2>&1; then
 fi
 
 display_num=${SELKIES_XWAYLAND_DISPLAY_NUM:-}
+
+# Some baseimage-selkies variants export DISPLAY (often :1) before running this script.
+# Prefer that DISPLAY number first when probing/starting Xwayland.
+BASE_DISPLAY_RAW="${DISPLAY:-}"
 export DISPLAY=""
+BASE_DISPLAY_NUM=""
+if printf '%s' "${BASE_DISPLAY_RAW}" | grep -Eq '^:[0-9]+$'; then
+  BASE_DISPLAY_NUM="${BASE_DISPLAY_RAW#:}"
+fi
 
 # Explicit auth files (prevents Plasma tools from failing to connect/auth to the Xwayland display)
 export XAUTHORITY="$HOME/.Xauthority"
@@ -336,17 +341,48 @@ fi
 # session startup. Force the non-systemd path.
 export PLASMA_USE_SYSTEMD=0
 
+is_x11_responsive() {
+  # Require more than just a socket file; stale sockets happen when Xwayland dies early.
+  local disp="$1"
+  [ -n "${disp}" ] || return 1
+  if command -v xdpyinfo >/dev/null 2>&1; then
+    run_as_abc xdpyinfo -display "${disp}" >/dev/null 2>&1
+    return $?
+  fi
+  # Best-effort fallback (less reliable than xdpyinfo).
+  if command -v xset >/dev/null 2>&1; then
+    run_as_abc xset -display "${disp}" q >/dev/null 2>&1
+    return $?
+  fi
+  return 0
+}
+
+rm_stale_x11_socket() {
+  local n="$1"
+  [ -n "${n}" ] || return 0
+  rm -f "/tmp/.X11-unix/X${n}" >/dev/null 2>&1 || true
+}
+
 # If the base compositor already started Xwayland, reuse it.
-for n in 0 1 2 3 4 5 6 7 8 9; do
+# Prefer the base-provided DISPLAY number (commonly :1) when present.
+probe_order=()
+if [ -n "${BASE_DISPLAY_NUM}" ]; then probe_order+=("${BASE_DISPLAY_NUM}"); fi
+probe_order+=(0 1 2 3 4 5 6 7 8 9)
+
+for n in "${probe_order[@]}"; do
   if [ -S "/tmp/.X11-unix/X${n}" ]; then
-    display_num="$n"
-    break
+    if is_x11_responsive ":${n}"; then
+      display_num="$n"
+      break
+    fi
+    log "WARNING: Found X socket /tmp/.X11-unix/X${n} but X is not responsive; removing stale socket"
+    rm_stale_x11_socket "${n}"
   fi
 done
 
 if [ -z "${display_num}" ]; then
   # Try to start our own rootless Xwayland on a free display.
-  for n in 0 1 2 3 4 5 6 7 8 9; do
+  for n in "${probe_order[@]}"; do
     if [ -S "/tmp/.X11-unix/X${n}" ]; then
       continue
     fi
@@ -413,7 +449,13 @@ if [ -z "${display_num}" ]; then
     done
 
     if [ -S "/tmp/.X11-unix/X${display_num}" ]; then
-      break
+      # Socket exists; now require that the X server is accepting connections.
+      if is_x11_responsive "${DISPLAY}"; then
+        break
+      fi
+      log "WARNING: X socket exists at /tmp/.X11-unix/X${display_num} but X is not responsive; cleaning up and trying next display"
+      kill "${xwpid}" >/dev/null 2>&1 || true
+      rm_stale_x11_socket "${display_num}"
     fi
     # Try next display number.
     display_num=""
@@ -432,15 +474,29 @@ fi
 # Wait until the X server is accepting connections (prevents kcminit/xrdb race).
 if command -v xdpyinfo >/dev/null 2>&1; then
   i=0
-  while [ $i -lt 30 ]; do
+  while [ $i -lt 60 ]; do
     if run_as_abc xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; then
       break
     fi
     sleep 1
     i=$((i + 1))
   done
-  if [ $i -ge 30 ]; then
-    log "WARNING: X did not become ready within 30s; continuing anyway"
+  if [ $i -ge 60 ]; then
+    log "ERROR: X did not become ready within 60s on ${DISPLAY}; refusing to start Plasma on a dead X server"
+    tail -n 100 /config/xwayland.log 2>/dev/null | while IFS= read -r line; do log "xwayland.log: ${line}"; done || true
+    exit 1
+  fi
+fi
+
+# Optional: smoke test (no-op unless STEAM_DEBUG_SMOKE_TEST=true)
+# Run it *after* X is confirmed responsive so it actually draws pixels.
+if [ "${STEAM_DEBUG_SMOKE_TEST:-}" = "true" ]; then
+  if command -v xsetroot >/dev/null 2>&1; then
+    run_as_abc_env "HOME=${HOME}" "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" "DISPLAY=${DISPLAY}" "XAUTHORITY=${XAUTHORITY}" "ICEAUTHORITY=${ICEAUTHORITY}" -- \
+      xsetroot -solid "#204060" >/dev/null 2>&1 || true
+  fi
+  if command -v selkies-smoke-test >/dev/null 2>&1; then
+    selkies-smoke-test || true
   fi
 fi
 
