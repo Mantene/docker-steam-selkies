@@ -138,6 +138,8 @@ ensure_log_writable
 SCRIPT_VERSION="2026-01-14-1"
 log "Script version: ${SCRIPT_VERSION}"
 
+log "Smoke test: STEAM_DEBUG_SMOKE_TEST=${STEAM_DEBUG_SMOKE_TEST:-} (set to 'true' to force an always-changing xterm window)"
+
 # Xwayland must connect to the *compositor's* Wayland socket.
 # Some setups expose multiple wayland-* sockets; pick one that is actually connectable.
 wayland_can_connect() {
@@ -583,6 +585,8 @@ if [ "${STEAM_DEBUG_SMOKE_TEST:-}" = "true" ]; then
   fi
   if command -v selkies-smoke-test >/dev/null 2>&1; then
     selkies-smoke-test || true
+  else
+    log "WARNING: STEAM_DEBUG_SMOKE_TEST=true but selkies-smoke-test is not installed in PATH"
   fi
 fi
 

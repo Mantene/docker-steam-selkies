@@ -1,14 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
-if [ "${STEAM_DEBUG_SMOKE_TEST:-}" != "true" ]; then
+force=0
+if [ "${1:-}" = "--force" ]; then
+  force=1
+fi
+
+if [ "${STEAM_DEBUG_SMOKE_TEST:-}" != "true" ] && [ ${force} -ne 1 ]; then
   exit 0
 fi
 
 log_file=/config/steam-selkies.log
 
 (
-  echo "steam-selkies: smoke test enabled (STEAM_DEBUG_SMOKE_TEST=true)"
+  if [ ${force} -eq 1 ]; then
+    echo "steam-selkies: smoke test forced (--force)"
+  else
+    echo "steam-selkies: smoke test enabled (STEAM_DEBUG_SMOKE_TEST=true)"
+  fi
   echo "steam-selkies: attempting to launch xterm to verify compositor+stream"
   echo "steam-selkies: env WAYLAND_DISPLAY=${WAYLAND_DISPLAY-} DISPLAY=${DISPLAY-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR-}"
 ) >>"${log_file}" 2>&1
