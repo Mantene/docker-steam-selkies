@@ -17,7 +17,9 @@ log "wrapper_version=2026-01-13"
 # those files can become unwritable and ksmserver will SIGABRT.
 um_before="$(umask 2>/dev/null || true)"
 log "umask_before=${um_before}"
-umask 0077
+# Use a sane default umask for desktop components.
+# NOTE: We still chmod authority files explicitly elsewhere.
+umask 0022
 log "umask_after=$(umask 2>/dev/null || true)"
 
 pre_runtime="${XDG_RUNTIME_DIR:-}"
@@ -45,7 +47,7 @@ if [ "${STEAM_DISABLE_ICEAUTH_TMP_PERMS_FIX:-0}" != "1" ]; then
     start_ts=$(date +%s 2>/dev/null || echo 0)
     deadline=$(( start_ts + 8 ))
     iter=0
-    max_iter=4000
+    max_iter=8000
     fixed=0
     while :; do
       iter=$((iter + 1))
@@ -58,17 +60,21 @@ if [ "${STEAM_DISABLE_ICEAUTH_TMP_PERMS_FIX:-0}" != "1" ]; then
 
       for f in "${dir_watch}"/iceauth_*; do
         [ -e "$f" ] || continue
-        owner_uid="$(stat -c %u "$f" 2>/dev/null || echo -1)"
-        [ "${owner_uid}" = "$(id -u)" ] || continue
 
-        # If the file is owner-unwritable (commonly mode 000), fix it.
+        # If the file is owner-unwritable (commonly mode 000/002), fix it immediately.
+        # We avoid extra stat() calls here to reduce the race window.
         if [ ! -w "$f" ]; then
           chmod 600 "$f" >/dev/null 2>&1 && fixed=$((fixed + 1))
         fi
       done
 
-      # Very short sleep to win the race; bounded loop duration keeps CPU impact low.
-      usleep 2000 2>/dev/null || sleep 0.002 2>/dev/null || sleep 0.01 2>/dev/null || true
+      # Extremely short sleep to win the race; bounded loop duration keeps CPU impact low.
+      # Busy-loop briefly at startup; then back off slightly.
+      if [ ${iter} -lt 500 ]; then
+        :
+      else
+        usleep 500 2>/dev/null || sleep 0.001 2>/dev/null || sleep 0.01 2>/dev/null || true
+      fi
     done
     echo "[steam-selkies][wrap:ksmserver] iceauth_tmp_perms_fix: chmodded=${fixed} dir=${dir_watch}" >>/config/steam-selkies.log 2>/dev/null || true
   ) &
