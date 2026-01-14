@@ -149,6 +149,16 @@ if [ -r /sys/module/nvidia_drm/parameters/modeset ]; then
     log "WARNING: NVIDIA KMS modeset appears disabled; Wayland capture is likely to fail (black screen)."
     log "WARNING: Fix: enable nvidia_drm.modeset=1 on the host, or run with PIXELFLUX_WAYLAND=false (X11 mode)."
   fi
+else
+  if [ -r /proc/modules ] && grep -q '^nvidia_drm ' /proc/modules 2>/dev/null; then
+    log "Host kernel: nvidia_drm is loaded but modeset parameter is not readable in this container"
+  else
+    log "Host kernel: nvidia_drm module not detected (/sys/module/nvidia_drm missing)"
+  fi
+  if [ -r /proc/driver/nvidia/version ]; then
+    ver="$(head -n 1 /proc/driver/nvidia/version 2>/dev/null || true)"
+    [ -n "${ver}" ] && log "Host kernel: ${ver}"
+  fi
 fi
 
 if [ -d /dev/dri ]; then

@@ -167,7 +167,7 @@ If `ls -l /dev/dri` shows the device nodes are already world-writable (e.g. `crw
 
 In that case, try one of these:
 
-- Disable Wayland/KMS mode: remove `PIXELFLUX_WAYLAND=true` (falls back to the Openbox/X11 session).
+- Disable Wayland/KMS mode: remove `PIXELFLUX_WAYLAND=true` (falls back to an X11 session; this image launches KDE directly in X11 mode).
 - Run the container as root (`PUID=0`, `PGID=0`) to confirm it’s a capability/KMS issue, then decide whether you want to stay root or stay on X11.
 
 ### Selkies shows a black screen (sometimes a flashing rectangle)

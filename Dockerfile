@@ -43,6 +43,8 @@ RUN \
     curl \
     strace \
     elogind \
+    upower \
+    udisks2 \
     jq \
     kmod \
     xauth \
