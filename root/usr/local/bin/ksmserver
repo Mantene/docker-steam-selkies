@@ -159,11 +159,12 @@ if [ "${STEAM_DEBUG_STRACE_KSMSERVER:-0}" = "1" ] && command -v strace >/dev/nul
 
   (
     set +e
-    sleep 0.25
+    err_out="/config/ksmserver.strace.err.log"
+    : >"${err_out}" 2>/dev/null || true
     echo "[steam-selkies][wrap:ksmserver] strace-attach: starting" >>/config/steam-selkies.log 2>/dev/null || true
 
     # Attach to this PID; after exec below, this PID becomes ksmserver.
-    strace -f -qq -o "${trace_out}" -s 0 -e trace=file,process,network -p "$$" &
+    strace -f -qq -o "${trace_out}" -s 0 -e trace=file,process,network -p "$$" 2>"${err_out}" &
     spid=$!
 
     # Give it a bounded capture window, then detach.
@@ -171,10 +172,19 @@ if [ "${STEAM_DEBUG_STRACE_KSMSERVER:-0}" = "1" ] && command -v strace >/dev/nul
     kill -INT "${spid}" >/dev/null 2>&1 || true
     wait "${spid}" >/dev/null 2>&1 || true
 
+    if [ -s "${err_out}" ]; then
+      head -n 8 "${err_out}" | while IFS= read -r line; do
+        echo "[steam-selkies][wrap:ksmserver] strace-err: ${line}" >>/config/steam-selkies.log 2>/dev/null || true
+      done
+    fi
+
     if [ ! -r "${trace_out}" ]; then
       echo "[steam-selkies][wrap:ksmserver] strace-ice: (trace not readable: ${trace_out})" >>/config/steam-selkies.log 2>/dev/null || true
       exit 0
     fi
+
+    trace_size="$(stat -c %s "${trace_out}" 2>/dev/null || echo 0)"
+    echo "[steam-selkies][wrap:ksmserver] strace-trace-size: ${trace_size}" >>/config/steam-selkies.log 2>/dev/null || true
 
     # Emit a compact summary.
     summary="$(grep -nEi "(ICEauthority|\\.ICEauthority|ICE-unix|\\.ICE-unix|/tmp/\\.X11-unix|Xauthority|\\.Xauthority|Xau|MIT-MAGIC-COOKIE)" "${trace_out}" | head -n 220)"
