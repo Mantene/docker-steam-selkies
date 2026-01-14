@@ -134,28 +134,93 @@ export PATH="/usr/local/bin:${PATH}"
 
 ensure_log_writable
 
-# Selkies conventions: compositor socket is typically wayland-1
-export WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1}
-
-# Xwayland must connect to the *existing* Selkies Wayland socket.
-# Do not repoint XDG_RUNTIME_DIR away from that socket before starting Xwayland.
-SELKIES_WAYLAND_DISPLAY="${WAYLAND_DISPLAY}"
-ORIG_XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}"
-SELKIES_XDG_RUNTIME_DIR=""
-for cand in "${ORIG_XDG_RUNTIME_DIR}" "/config/.XDG" "/run/user/$(id -u abc 2>/dev/null || echo 99)"; do
-  [ -n "${cand}" ] || continue
-  if [ -S "${cand}/${SELKIES_WAYLAND_DISPLAY}" ]; then
-    SELKIES_XDG_RUNTIME_DIR="${cand}"
-    break
+# Xwayland must connect to the *compositor's* Wayland socket.
+# Some setups expose multiple wayland-* sockets; pick one that is actually connectable.
+wayland_can_connect() {
+  local sock_path="$1"
+  [ -S "${sock_path}" ] || return 1
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "${sock_path}" <<'PY'
+import socket, sys
+path = sys.argv[1]
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+try:
+    s.connect(path)
+except OSError as e:
+    # Print errno info for callers to log.
+    print(f"ERRNO={e.errno} {e.strerror}")
+    sys.exit(1)
+finally:
+    try:
+        s.close()
+    except Exception:
+        pass
+sys.exit(0)
+PY
+    return $?
   fi
-done
 
-if [ -z "${SELKIES_XDG_RUNTIME_DIR}" ]; then
-  log "ERROR: Could not locate Wayland socket '${SELKIES_WAYLAND_DISPLAY}' under XDG_RUNTIME_DIR candidates (orig='${ORIG_XDG_RUNTIME_DIR}')."
-  log "Hint: base compositor likely uses /config/.XDG; ensure WAYLAND_DISPLAY matches."
+  # Fallback: attempt a basic connect via socat if present.
+  if command -v socat >/dev/null 2>&1; then
+    socat -T 1 - "UNIX-CONNECT:${sock_path}" </dev/null >/dev/null 2>&1
+    return $?
+  fi
+  return 0
+}
+
+pick_wayland_socket() {
+  local requested_display="${WAYLAND_DISPLAY:-}"
+  local orig_runtime="${XDG_RUNTIME_DIR:-}"
+  local uid_cand
+  uid_cand="$(id -u abc 2>/dev/null || echo 99)"
+
+  local -a runtime_dirs
+  runtime_dirs=("${orig_runtime}" "/config/.XDG" "/run/user/${uid_cand}")
+
+  for rt in "${runtime_dirs[@]}"; do
+    [ -n "${rt}" ] || continue
+    [ -d "${rt}" ] || continue
+
+    # First try the explicitly requested WAYLAND_DISPLAY (if any).
+    if [ -n "${requested_display}" ] && [ -S "${rt}/${requested_display}" ]; then
+      out="$(wayland_can_connect "${rt}/${requested_display}" 2>&1)"
+      if [ $? -eq 0 ]; then
+        echo "${rt}|${requested_display}"
+        return 0
+      fi
+      log "WARNING: Wayland socket exists but is not connectable: ${rt}/${requested_display} (${out:-unknown error})"
+    fi
+
+    # Otherwise probe any wayland-* sockets that exist.
+    for sock in "${rt}"/wayland-*; do
+      [ -S "${sock}" ] || continue
+      sock_name="$(basename "${sock}")"
+      out="$(wayland_can_connect "${sock}" 2>&1)"
+      if [ $? -eq 0 ]; then
+        echo "${rt}|${sock_name}"
+        return 0
+      fi
+      log "WARNING: Wayland socket not connectable: ${sock} (${out:-unknown error})"
+    done
+  done
+
+  return 1
+}
+
+SELKIES_XDG_RUNTIME_DIR=""
+SELKIES_WAYLAND_DISPLAY=""
+if picked="$(pick_wayland_socket 2>/dev/null)"; then
+  SELKIES_XDG_RUNTIME_DIR="${picked%%|*}"
+  SELKIES_WAYLAND_DISPLAY="${picked##*|}"
+else
+  # Fall back to prior behavior: default to wayland-1 under /config/.XDG.
+  SELKIES_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+  ORIG_XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}"
   SELKIES_XDG_RUNTIME_DIR="${ORIG_XDG_RUNTIME_DIR:-/config/.XDG}"
+  log "WARNING: Could not find a connectable Wayland socket; falling back to ${SELKIES_XDG_RUNTIME_DIR}/${SELKIES_WAYLAND_DISPLAY}"
 fi
 
+export WAYLAND_DISPLAY="${SELKIES_WAYLAND_DISPLAY}"
 log "Selkies runtime: WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}"
 
 # The compositor may create the runtime dir/socket slightly after this script starts.
@@ -171,8 +236,20 @@ while [ $i -lt 50 ]; do
 done
 if [ -S "${selkies_wayland_socket}" ]; then
   log "Selkies socket: present at ${selkies_wayland_socket}"
-  # Give the compositor a brief moment to become connectable.
-  sleep 0.25
+  # Give the compositor a moment to become connectable.
+  # (Socket existence is not enough; connection may still be refused early in boot.)
+  j=0
+  while [ $j -lt 50 ]; do
+    out="$(wayland_can_connect "${selkies_wayland_socket}" 2>&1)"
+    if [ $? -eq 0 ]; then
+      break
+    fi
+    j=$((j + 1))
+    sleep 0.1
+  done
+  if [ $j -ge 50 ]; then
+    log "WARNING: Wayland socket exists but is not connectable yet: ${selkies_wayland_socket} (${out:-unknown error})"
+  fi
 else
   log "WARNING: Selkies socket not present at ${selkies_wayland_socket} (continuing; Xwayland may fail)"
 fi

@@ -15,26 +15,11 @@ log_file=/config/steam-selkies.log
 
 # Give the compositor/XWayland a moment to come up.
 for _ in $(seq 1 10); do
-  if [ -n "${DISPLAY-}" ] || [ -S /tmp/.X11-unix/X0 ] || pgrep -x Xwayland >/dev/null 2>&1; then
+  if [ -n "${DISPLAY-}" ] || pgrep -x Xwayland >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-
-# If DISPLAY is missing but X0 exists, infer DISPLAY=:0.
-if [ -z "${DISPLAY-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
-  export DISPLAY=:0
-  echo "steam-selkies: inferred DISPLAY=${DISPLAY} from /tmp/.X11-unix/X0" >>"${log_file}" 2>&1
-fi
-
-# If DISPLAY is set but doesn't correspond to a live X socket, prefer X0.
-if [ -n "${DISPLAY-}" ]; then
-  dnum="${DISPLAY#:}"
-  if [ -n "${dnum}" ] && [ ! -S "/tmp/.X11-unix/X${dnum}" ] && [ -S /tmp/.X11-unix/X0 ]; then
-    echo "steam-selkies: DISPLAY=${DISPLAY} has no /tmp/.X11-unix/X${dnum}; overriding to :0" >>"${log_file}" 2>&1
-    export DISPLAY=:0
-  fi
-fi
 
 # If DISPLAY is still missing, try to infer from the Xwayland command line.
 if [ -z "${DISPLAY-}" ] && pgrep -x Xwayland >/dev/null 2>&1; then
@@ -43,6 +28,17 @@ if [ -z "${DISPLAY-}" ] && pgrep -x Xwayland >/dev/null 2>&1; then
     export DISPLAY="${xw_display}"
     echo "steam-selkies: inferred DISPLAY=${DISPLAY} from Xwayland process" >>"${log_file}" 2>&1
   fi
+fi
+
+# As a last resort, pick the first X display that responds.
+if [ -z "${DISPLAY-}" ] && command -v xdpyinfo >/dev/null 2>&1; then
+  for n in 1 0 2 3 4 5 6 7 8 9; do
+    if xdpyinfo -display ":${n}" >/dev/null 2>&1; then
+      export DISPLAY=":${n}"
+      echo "steam-selkies: inferred DISPLAY=${DISPLAY} from xdpyinfo probe" >>"${log_file}" 2>&1
+      break
+    fi
+  done
 fi
 
 if command -v xterm >/dev/null 2>&1; then
