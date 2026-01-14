@@ -12,6 +12,14 @@ log() {
 
 log "wrapper_version=2026-01-13"
 
+# ksmserver/libICE uses temporary lock/write files (iceauth_*) and may derive their
+# mode from the current process umask. If the umask is unexpectedly restrictive,
+# those files can become unwritable and ksmserver will SIGABRT.
+um_before="$(umask 2>/dev/null || true)"
+log "umask_before=${um_before}"
+umask 0077
+log "umask_after=$(umask 2>/dev/null || true)"
+
 pre_runtime="${XDG_RUNTIME_DIR:-}"
 
 # XDG_RUNTIME_DIR should be on a local/ephemeral filesystem; /config can be a host bind
