@@ -27,10 +27,8 @@ abc_env_args() {
   local home="${HOME:-/config}"
   # XDG_RUNTIME_DIR should be on a local/ephemeral filesystem; keeping it on /config
   # (host bind mounts / FUSE) can break atomic temp/lock behavior used by Qt/libICE.
-  local runtime="${XDG_RUNTIME_DIR:-/tmp/.XDG}"
-  if printf '%s' "${runtime}" | grep -q '^/config/'; then
-    runtime="/tmp/.XDG"
-  fi
+  local runtime="${KDE_XDG_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/tmp/.XDG}}"
+  if printf '%s' "${runtime}" | grep -q '^/config/'; then runtime="/tmp/.XDG"; fi
   local tmp="${TMPDIR:-/config/tmp}"
   local xauth="${XAUTHORITY:-${home}/.Xauthority}"
   local iceauth="${ICEAUTHORITY:-${home}/.ICEauthority}"
@@ -47,6 +45,36 @@ abc_env_args() {
     "TMPDIR=${tmp}"
     "PATH=${PATH}"
   )
+}
+
+run_as_abc_env() {
+  # Usage: run_as_abc_env VAR=... VAR=... -- cmd args...
+  if [ "$(id -u)" -ne 0 ] || ! id abc >/dev/null 2>&1; then
+    env "$@"
+    return $?
+  fi
+
+  local -a envs
+  envs=()
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--" ]; then
+      shift
+      break
+    fi
+    envs+=("$1")
+    shift
+  done
+
+  if command -v s6-setuidgid >/dev/null 2>&1; then
+    s6-setuidgid abc env "${envs[@]}" "$@"
+    return $?
+  fi
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u abc --preserve-environment -- env "${envs[@]}" "$@"
+    return $?
+  fi
+
+  su -m -s /bin/bash abc -c "env $(printf '%q ' "${envs[@]}") $(printf '%q ' "$@")"
 }
 
 run_as_abc() {
@@ -107,22 +135,44 @@ ensure_log_writable
 # Selkies conventions: compositor socket is typically wayland-1
 export WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1}
 
-# Runtime dir: must be local/ephemeral (not /config) for Qt/libICE atomic temp+lock usage.
-if [ -z "${XDG_RUNTIME_DIR:-}" ] || printf '%s' "${XDG_RUNTIME_DIR}" | grep -q '^/config/'; then
-  export XDG_RUNTIME_DIR=/tmp/.XDG
+# Xwayland must connect to the *existing* Selkies Wayland socket.
+# Do not repoint XDG_RUNTIME_DIR away from that socket before starting Xwayland.
+SELKIES_WAYLAND_DISPLAY="${WAYLAND_DISPLAY}"
+ORIG_XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}"
+SELKIES_XDG_RUNTIME_DIR=""
+for cand in "${ORIG_XDG_RUNTIME_DIR}" "/config/.XDG" "/run/user/$(id -u abc 2>/dev/null || echo 99)"; do
+  [ -n "${cand}" ] || continue
+  if [ -S "${cand}/${SELKIES_WAYLAND_DISPLAY}" ]; then
+    SELKIES_XDG_RUNTIME_DIR="${cand}"
+    break
+  fi
+done
+
+if [ -z "${SELKIES_XDG_RUNTIME_DIR}" ]; then
+  log "ERROR: Could not locate Wayland socket '${SELKIES_WAYLAND_DISPLAY}' under XDG_RUNTIME_DIR candidates (orig='${ORIG_XDG_RUNTIME_DIR}')."
+  log "Hint: base compositor likely uses /config/.XDG; ensure WAYLAND_DISPLAY matches."
+  SELKIES_XDG_RUNTIME_DIR="${ORIG_XDG_RUNTIME_DIR:-/config/.XDG}"
 fi
-mkdir -p "${XDG_RUNTIME_DIR}" || true
-chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+
+log "Selkies runtime: WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}"
+
+# KDE runtime dir: must be local/ephemeral (not /config) for Qt/libICE atomic temp+lock usage.
+export KDE_XDG_RUNTIME_DIR=/tmp/.XDG
+mkdir -p "${KDE_XDG_RUNTIME_DIR}" || true
+chmod 700 "${KDE_XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
 
 if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
-  chown abc:users "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
-  chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+  chown abc:users "${KDE_XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
+  chmod 700 "${KDE_XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
 fi
+
+# Use the KDE runtime dir for the rest of the session, but keep SELKIES_* for Xwayland.
+export XDG_RUNTIME_DIR="${KDE_XDG_RUNTIME_DIR}"
 
 export HOME="${HOME:-/config}"
 log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${HOME:-}"
 log "Env: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY:-}"
-ls -ld "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
+ls -ld "${SELKIES_XDG_RUNTIME_DIR}" "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
 
 # Prefer a stable temp directory for KDE tooling.
 export TMPDIR="${TMPDIR:-/config/tmp}"
@@ -286,9 +336,13 @@ if [ -z "${display_num}" ]; then
       log "WARNING: xauth not found; X11 authentication may fail (install xauth)"
     fi
 
-    log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${WAYLAND_DISPLAY})"
+    log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${SELKIES_WAYLAND_DISPLAY})"
     # -ac disables access control; inside a container this avoids brittle Xauthority issues.
-    run_as_abc Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -ac -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
+    run_as_abc_env \
+      "HOME=${HOME}" "USER=abc" "LOGNAME=abc" \
+      "XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}" "WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY}" \
+      "DISPLAY=${DISPLAY}" "XAUTHORITY=${XAUTHORITY}" "ICEAUTHORITY=${ICEAUTHORITY}" "TMPDIR=${TMPDIR}" "PATH=${PATH}" \
+      -- Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -ac -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
     xwpid=$!
 
     i=0
