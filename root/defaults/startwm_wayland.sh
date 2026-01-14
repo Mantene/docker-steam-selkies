@@ -158,6 +158,23 @@ fi
 
 log "Selkies runtime: WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}"
 
+# The compositor may create the runtime dir/socket slightly after this script starts.
+# Wait briefly for the socket to appear to avoid a first-attempt Xwayland failure.
+selkies_wayland_socket="${SELKIES_XDG_RUNTIME_DIR}/${SELKIES_WAYLAND_DISPLAY}"
+i=0
+while [ $i -lt 50 ]; do
+  if [ -S "${selkies_wayland_socket}" ]; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 0.1
+done
+if [ -S "${selkies_wayland_socket}" ]; then
+  log "Selkies socket: present at ${selkies_wayland_socket}"
+else
+  log "WARNING: Selkies socket not present at ${selkies_wayland_socket} (continuing; Xwayland may fail)"
+fi
+
 # KDE runtime dir: must be local/ephemeral (not /config) for Qt/libICE atomic temp+lock usage.
 export KDE_XDG_RUNTIME_DIR=/tmp/.XDG
 mkdir -p "${KDE_XDG_RUNTIME_DIR}" || true
@@ -349,12 +366,18 @@ if [ -z "${display_num}" ]; then
     log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${SELKIES_WAYLAND_DISPLAY})"
     log "Xwayland log: ${xwlog} (symlink /config/xwayland.log -> ${xwlog})"
     # -ac disables access control; inside a container this avoids brittle Xauthority issues.
-    run_as_abc_env \
-      "HOME=${HOME}" "USER=abc" "LOGNAME=abc" \
-      "XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}" "WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY}" \
-      "DISPLAY=${DISPLAY}" "XAUTHORITY=${XAUTHORITY}" "ICEAUTHORITY=${ICEAUTHORITY}" "TMPDIR=${TMPDIR}" "PATH=${PATH}" \
-      -- Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -ac -auth "${XAUTHORITY}" >>"${xwlog}" 2>&1 &
-    xwpid=$!
+    start_xwayland() {
+      run_as_abc_env \
+        "HOME=${HOME}" "USER=abc" "LOGNAME=abc" \
+        "XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}" "WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY}" \
+        "DISPLAY=${DISPLAY}" "XAUTHORITY=${XAUTHORITY}" "ICEAUTHORITY=${ICEAUTHORITY}" "TMPDIR=${TMPDIR}" "PATH=${PATH}" \
+        -- Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -ac -auth "${XAUTHORITY}" >>"${xwlog}" 2>&1 &
+      xwpid=$!
+    }
+
+    xwpid=""
+    xw_retried=0
+    start_xwayland
 
     i=0
     while [ $i -lt 30 ]; do
@@ -363,6 +386,16 @@ if [ -z "${display_num}" ]; then
       fi
       if ! kill -0 "${xwpid}" >/dev/null 2>&1; then
         log "ERROR: Xwayland exited early (pid=${xwpid}); see ${xwlog}"
+        # Common transient failure: compositor isn't ready yet.
+        if [ "${xw_retried}" -eq 0 ] && tail -n 50 "${xwlog}" 2>/dev/null | grep -q "could not connect to wayland server"; then
+          log "Retrying Xwayland once on ${DISPLAY} after brief delay (Wayland not ready?)"
+          sleep 0.5
+          xw_retried=1
+          start_xwayland
+          # reset wait loop for the retry
+          i=0
+          continue
+        fi
         break
       fi
       sleep 1
