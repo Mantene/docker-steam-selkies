@@ -168,6 +168,34 @@ If `ls -l /dev/dri` shows the device nodes are already world-writable (e.g. `crw
 In that case, try one of these:
 
 - Disable Wayland/KMS mode: remove `PIXELFLUX_WAYLAND=true` (falls back to an X11 session; this image launches KDE directly in X11 mode).
+
+### X11 performance tuning (recommended)
+
+If you are running with `PIXELFLUX_WAYLAND=false` (X11 mode), the container launches KDE Plasma directly via the X11 startup script and applies a few safe performance defaults.
+
+**Optional environment knobs:**
+
+- `STEAM_KDE_PERF_TWEAKS=true|false` (default `true`): enable/disable KDE performance tweaks.
+- `STEAM_KDE_PERF_TWEAKS_FORCE=true` (default `false`): re-apply tweaks even if already applied.
+- `STEAM_KDE_ANIMATION_FACTOR=0` (default `0`): Plasma animation duration factor (0 disables animations).
+- `STEAM_KDE_DISABLE_COMPOSITING=true|false` (default `true`): disable KWin compositing (often improves remote smoothness).
+- `STEAM_KDE_DISABLE_EFFECTS=true|false` (default `true`): aggressively disable common KWin effects (blur, translucency, etc.).
+- `STEAM_KDE_DISABLE_SCREENLOCK=true|false` (default `true`): disable the KDE screen locker (prevents “mystery black screen” in streamed sessions).
+- `STEAM_KDE_DISABLE_BALOO=true|false` (default `true`): disable Baloo file indexing to reduce background CPU/disk.
+
+**Aggressive service trimming:**
+
+- `AKONADI_DISABLE=true|false` (default `true`): disables Akonadi (mail/contacts/calendar backend) to reduce background processes.
+
+**Low-latency defaults (can be overridden):**
+
+- `KWIN_X11_NO_SYNC_TO_VBLANK=1`
+- `__GL_SYNC_TO_VBLANK=0`
+
+**Stream settings that typically help:**
+
+- Prefer H.264 for lower bandwidth/CPU: `SELKIES_ENCODER=x264enc` (requires HTTPS for WebCodecs in most browsers)
+- Clamp resolution to avoid over-rendering: `SELKIES_MANUAL_WIDTH=1920`, `SELKIES_MANUAL_HEIGHT=1080`, `MAX_RESOLUTION=1920x1080`
 - Run the container as root (`PUID=0`, `PGID=0`) to confirm it’s a capability/KMS issue, then decide whether you want to stay root or stay on X11.
 
 ### Selkies shows a black screen (sometimes a flashing rectangle)
