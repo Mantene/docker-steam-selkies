@@ -142,23 +142,37 @@ log "Smoke test: STEAM_DEBUG_SMOKE_TEST=${STEAM_DEBUG_SMOKE_TEST:-} (set to 'tru
 
 # NVIDIA proprietary drivers require nvidia_drm KMS modesetting for wlroots/GBM paths.
 # Without it, PIXELFLUX_WAYLAND sessions often initialize but stream black / capture loop stops.
+nvidia_modeset=""
 if [ -r /sys/module/nvidia_drm/parameters/modeset ]; then
   nvidia_modeset="$(cat /sys/module/nvidia_drm/parameters/modeset 2>/dev/null | tr -d '\n' || true)"
-  log "Host kernel: nvidia_drm.modeset=${nvidia_modeset:-unknown}"
-  if [ "${nvidia_modeset}" = "N" ] || [ "${nvidia_modeset}" = "0" ]; then
-    log "WARNING: NVIDIA KMS modeset appears disabled; Wayland capture is likely to fail (black screen)."
-    log "WARNING: Fix: enable nvidia_drm.modeset=1 on the host, or run with PIXELFLUX_WAYLAND=false (X11 mode)."
-  fi
+  log "Host kernel: nvidia_drm.modeset=${nvidia_modeset:-unknown} (/sys/module)"
 else
+  # Some container runtimes hide /sys/module/*; try to infer via the active DRM device.
   if [ -r /proc/modules ] && grep -q '^nvidia_drm ' /proc/modules 2>/dev/null; then
-    log "Host kernel: nvidia_drm is loaded but modeset parameter is not readable in this container"
+    log "Host kernel: nvidia_drm is loaded but /sys/module/nvidia_drm/parameters/modeset is not readable in this container"
   else
     log "Host kernel: nvidia_drm module not detected (/sys/module/nvidia_drm missing)"
   fi
+
+  for card in /sys/class/drm/card*/device/driver/module/parameters/modeset; do
+    [ -e "${card}" ] || continue
+    v="$(cat "${card}" 2>/dev/null | tr -d '\n' || true)"
+    if [ -n "${v}" ]; then
+      log "Host kernel: nvidia_drm.modeset=${v} (${card})"
+      nvidia_modeset="${v}"
+      break
+    fi
+  done
+
   if [ -r /proc/driver/nvidia/version ]; then
     ver="$(head -n 1 /proc/driver/nvidia/version 2>/dev/null || true)"
     [ -n "${ver}" ] && log "Host kernel: ${ver}"
   fi
+fi
+
+if [ "${nvidia_modeset}" = "N" ] || [ "${nvidia_modeset}" = "0" ]; then
+  log "WARNING: NVIDIA KMS modeset appears disabled; Wayland capture is likely to fail (black screen)."
+  log "WARNING: Fix: enable nvidia_drm.modeset=1 on the host, or run with PIXELFLUX_WAYLAND=false (X11 mode)."
 fi
 
 if [ -d /dev/dri ]; then
