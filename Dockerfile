@@ -140,6 +140,7 @@ RUN chmod +x \
   /custom-cont-init.d/48-start-upower-udisks2.sh \
   /custom-cont-init.d/99-steam-selkies-autostart-migrate.sh \
   /defaults/startwm_wayland.sh \
+  /defaults/startwm.sh \
   /defaults/autostart
 
 # Ensure any absolute-path ksmserver launch uses our wrapper.

@@ -140,6 +140,21 @@ log "Script version: ${SCRIPT_VERSION}"
 
 log "Smoke test: STEAM_DEBUG_SMOKE_TEST=${STEAM_DEBUG_SMOKE_TEST:-} (set to 'true' to force an always-changing xterm window)"
 
+# NVIDIA proprietary drivers require nvidia_drm KMS modesetting for wlroots/GBM paths.
+# Without it, PIXELFLUX_WAYLAND sessions often initialize but stream black / capture loop stops.
+if [ -r /sys/module/nvidia_drm/parameters/modeset ]; then
+  nvidia_modeset="$(cat /sys/module/nvidia_drm/parameters/modeset 2>/dev/null | tr -d '\n' || true)"
+  log "Host kernel: nvidia_drm.modeset=${nvidia_modeset:-unknown}"
+  if [ "${nvidia_modeset}" = "N" ] || [ "${nvidia_modeset}" = "0" ]; then
+    log "WARNING: NVIDIA KMS modeset appears disabled; Wayland capture is likely to fail (black screen)."
+    log "WARNING: Fix: enable nvidia_drm.modeset=1 on the host, or run with PIXELFLUX_WAYLAND=false (X11 mode)."
+  fi
+fi
+
+if [ -d /dev/dri ]; then
+  ls -l /dev/dri 2>/dev/null | while IFS= read -r line; do log "dri: ${line}"; done || true
+fi
+
 # Xwayland must connect to the *compositor's* Wayland socket.
 # Some setups expose multiple wayland-* sockets; pick one that is actually connectable.
 wayland_can_connect() {
