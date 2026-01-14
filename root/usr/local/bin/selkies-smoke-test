@@ -30,6 +30,12 @@ for _ in $(seq 1 10); do
   sleep 1
 done
 
+# When running manually (e.g. docker exec) environment may be mostly empty.
+# X11 apps don't strictly need XDG_RUNTIME_DIR, but some desktop components do.
+if [ -z "${XDG_RUNTIME_DIR-}" ]; then
+  export XDG_RUNTIME_DIR="/tmp/.XDG"
+fi
+
 # If DISPLAY is still missing, try to infer from the Xwayland command line.
 if [ -z "${DISPLAY-}" ] && pgrep -x Xwayland >/dev/null 2>&1; then
   xw_display="$(pgrep -a Xwayland | awk '{for(i=1;i<=NF;i++) if ($i ~ /^:[0-9]+$/) {print $i; exit}}')"
@@ -57,17 +63,32 @@ if command -v xterm >/dev/null 2>&1; then
     launch_as_user="abc"
   fi
 
+  # Build a small runner script to avoid brittle quoting with su -c.
+  runner="$(mktemp /tmp/selkies-smoke-test.XXXXXX.sh 2>/dev/null || echo /tmp/selkies-smoke-test.$$)"
+  cat >"${runner}" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec env \
+  DISPLAY="${DISPLAY:-}" \
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/.XDG}" \
+  HOME="${HOME:-/config}" \
+  xterm -title "Selkies Smoke Test" -geometry 120x40+40+40 -bg "#ffcc00" -fg "#000000" -fa "Monospace" -fs 18 \
+    -e bash -lc 'echo "SELKIES SMOKE TEST"; echo; echo "If you can see this big yellow window updating once per second, capture is working and this is not a codec problem."; echo; echo "Close this window when done."; echo; while true; do date; sleep 1; clear; done'
+SH
+  chmod +x "${runner}" >/dev/null 2>&1 || true
+
   # Run in background; make it visually obvious in the stream.
   (
     echo "steam-selkies: launching xterm (DISPLAY=${DISPLAY-}) (continuous redraw)";
     if [ -n "${launch_as_user}" ]; then
-        su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' xterm -title 'Selkies Smoke Test' -geometry 120x40+40+40 -bg '#ffcc00' -fg '#000000' -fa 'Monospace' -fs 18 -e bash -lc 'echo \"SELKIES SMOKE TEST\"; echo; echo \"If you can see this big yellow window updating once per second, capture is working and this is not a codec problem.\"; echo; echo \"DISPLAY='\"\"${DISPLAY-}\"\"\"; XDG_RUNTIME_DIR='\"\"${XDG_RUNTIME_DIR-}\"\"\"\"; echo; echo \"Close this window when done.\"; echo; while true; do date; sleep 1; clear; done'";
+      su -s /bin/bash "${launch_as_user}" -c "env DISPLAY='${DISPLAY-}' XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR-}' HOME='${HOME-}' ${runner}";
       echo "steam-selkies: xterm (as ${launch_as_user}) exited rc=$?";
     else
-      xterm -title "Selkies Smoke Test" -geometry 120x40+40+40 -bg "#ffcc00" -fg "#000000" -fa "Monospace" -fs 18 \
-        -e bash -lc 'echo "SELKIES SMOKE TEST"; echo; echo "If you can see this big yellow window updating once per second, capture is working and this is not a codec problem."; echo; echo "Close this window when done."; echo; while true; do date; sleep 1; clear; done'
+      "${runner}"
       echo "steam-selkies: xterm exited rc=$?";
     fi
+    rm -f "${runner}" >/dev/null 2>&1 || true
   ) >>"${log_file}" 2>&1 &
   exit 0
 fi
