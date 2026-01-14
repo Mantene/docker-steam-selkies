@@ -11,6 +11,11 @@ LABEL maintainer="df-steam"
 # App title
 ENV TITLE="Steam"
 
+# Selkies defaults
+# JPEG is the most compatible option across browsers and avoids WebCodecs/H.264 black-screen issues.
+# Override at runtime if you prefer H.264: `-e SELKIES_ENCODER=x264enc`.
+ENV SELKIES_ENCODER=jpeg
+
 RUN \
   echo "**** validate arch ****" && \
   ARCH="$(dpkg --print-architecture)" && \

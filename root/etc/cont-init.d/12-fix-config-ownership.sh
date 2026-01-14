@@ -46,4 +46,13 @@ for f in /config/.Xauthority /config/.ICEauthority; do
   fi
 done
 
+# KDE frequently reads/writes these; if they were created with mode 000 due to odd host FS semantics,
+# Plasma will spam errors and may lose places/bookmarks.
+for f in /config/.local/share/user-places.xbel /config/.local/share/user-places.xbel.tbcache; do
+  if [ -e "$f" ]; then
+    chown "$uid:$gid" "$f" >/dev/null 2>&1 || true
+    chmod 644 "$f" >/dev/null 2>&1 || true
+  fi
+done
+
 echo "[steam-selkies] ensured /config ownership for abc (${uid}:${gid})"
