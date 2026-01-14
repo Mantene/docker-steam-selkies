@@ -28,6 +28,9 @@ abc_env_args() {
   # XDG_RUNTIME_DIR should be on a local/ephemeral filesystem; keeping it on /config
   # (host bind mounts / FUSE) can break atomic temp/lock behavior used by Qt/libICE.
   local runtime="${XDG_RUNTIME_DIR:-/tmp/.XDG}"
+  if printf '%s' "${runtime}" | grep -q '^/config/'; then
+    runtime="/tmp/.XDG"
+  fi
   local tmp="${TMPDIR:-/config/tmp}"
   local xauth="${XAUTHORITY:-${home}/.Xauthority}"
   local iceauth="${ICEAUTHORITY:-${home}/.ICEauthority}"
@@ -105,7 +108,9 @@ ensure_log_writable
 export WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-1}
 
 # Runtime dir: must be local/ephemeral (not /config) for Qt/libICE atomic temp+lock usage.
-export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/.XDG}
+if [ -z "${XDG_RUNTIME_DIR:-}" ] || printf '%s' "${XDG_RUNTIME_DIR}" | grep -q '^/config/'; then
+  export XDG_RUNTIME_DIR=/tmp/.XDG
+fi
 mkdir -p "${XDG_RUNTIME_DIR}" || true
 chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
 
