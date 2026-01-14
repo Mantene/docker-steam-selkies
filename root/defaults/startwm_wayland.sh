@@ -193,6 +193,13 @@ export XDG_RUNTIME_DIR="${KDE_XDG_RUNTIME_DIR}"
 export HOME="${HOME:-/config}"
 log "Running as: $(id -un 2>/dev/null || true) uid=$(id -u) gid=$(id -g) HOME=${HOME:-}"
 log "Env: WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} DISPLAY=${DISPLAY:-}"
+
+# Ensure common per-user dirs exist (KDE expects these); avoid root-owned files under /config.
+mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.cache" >/dev/null 2>&1 || true
+if [ "$(id -u)" -eq 0 ] && id abc >/dev/null 2>&1; then
+  chown -R abc:users "$HOME/.config" "$HOME/.local" "$HOME/.cache" >/dev/null 2>&1 || true
+fi
+
 ls -ld "${SELKIES_XDG_RUNTIME_DIR}" "${XDG_RUNTIME_DIR}" "$HOME" "$HOME/.config" 2>/dev/null | while IFS= read -r line; do log "perm: ${line}"; done || true
 
 # Prefer a stable temp directory for KDE tooling.
@@ -249,8 +256,8 @@ fi
 # Ensure Steam autostarts once Plasma is up
 
 set +e
-mkdir -p "$HOME/.config/autostart" >/dev/null 2>&1
-cat > "$HOME/.config/autostart/steam.desktop" <<EOF
+run_as_abc mkdir -p "$HOME/.config/autostart" >/dev/null 2>&1
+run_as_abc_env "HOME=${HOME}" "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" -- bash -lc 'cat > "$HOME/.config/autostart/steam.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Exec=steam-selkies
@@ -260,6 +267,7 @@ X-GNOME-Autostart-enabled=true
 Name=Steam
 Comment=Start Steam client
 EOF
+'
 rc=$?
 set -e
 

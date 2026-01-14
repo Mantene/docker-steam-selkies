@@ -24,11 +24,14 @@ ensure_dir /config 0755
 ensure_dir /config/.XDG 0700
 ensure_dir /config/.config 0755
 ensure_dir /config/.config/autostart 0755
+ensure_dir /config/.local 0755
+ensure_dir /config/.local/share 0755
+ensure_dir /config/.cache 0755
 ensure_dir /config/Desktop 0755
 ensure_dir /config/tmp 0700
 
 # If these already exist but are owned by root, KDE will fail to update them.
-chown -R "$uid:$gid" /config/.XDG /config/.config /config/Desktop >/dev/null 2>&1 || true
+chown -R "$uid:$gid" /config/.XDG /config/.config /config/.local /config/.cache /config/Desktop >/dev/null 2>&1 || true
 
 # Ensure the main debug log is writable by abc; startwm scripts append very early.
 touch /config/steam-selkies.log >/dev/null 2>&1 || true
