@@ -149,38 +149,55 @@ if [ -n "${ICEAUTHORITY:-}" ]; then
 fi
 
 if [ "${STEAM_DEBUG_STRACE_KSMSERVER:-0}" = "1" ] && command -v strace >/dev/null 2>&1; then
+  # IMPORTANT: do NOT run ksmserver *under* strace here. ksmserver/drkonqi often
+  # fork/stop processes, which can keep `strace -f` alive indefinitely.
+  # Instead, we attach for a short window to capture early ICE setup.
   trace_out="/config/ksmserver.filestrace.log"
-  log "strace enabled: ${trace_out}"
-  # NOTE: ksmserver commonly exits non-zero when it fails; with `set -e` we must
-  # not abort before we can extract the relevant syscalls from the trace.
-  set +e
-  # File/process/network syscalls only; avoid leaking authority contents.
-  # `network` helps catch ICE unix socket connect/bind failures.
-  strace -f -qq -o "${trace_out}" -s 0 -e trace=file,process,network "${REAL_KSMSERVER}" "$@"
-  rc=$?
-  set -e
+  trace_seconds="${STEAM_DEBUG_STRACE_SECONDS:-8}"
 
-  # Pull out ICE-relevant operations for quick diagnosis.
-  if [ -r "${trace_out}" ]; then
-    # Pull out the most relevant ops for ICE/X11 auth and sockets.
-    # (Broad match on purpose; still limited to file/process/network syscalls.)
+  log "strace attach enabled: out=${trace_out} seconds=${trace_seconds} target_pid=$$"
+
+  (
     set +e
-    matches="$(grep -Ei "(ICEauthority|\\.ICEauthority|ICE-unix|\\.ICE-unix|/tmp/\\.X11-unix|Xauthority|\\.Xauthority|Xau|MIT-MAGIC-COOKIE)" "${trace_out}" | head -n 400)"
-    rc_grep=$?
-    set -e
+    sleep 0.25
+    echo "[steam-selkies][wrap:ksmserver] strace-attach: starting" >>/config/steam-selkies.log 2>/dev/null || true
 
-    if [ ${rc_grep} -ne 0 ] || [ -z "${matches}" ]; then
-      log "strace-ice: (no matches in trace; inspect ${trace_out})"
+    # Attach to this PID; after exec below, this PID becomes ksmserver.
+    strace -f -qq -o "${trace_out}" -s 0 -e trace=file,process,network -p "$$" &
+    spid=$!
+
+    # Give it a bounded capture window, then detach.
+    sleep "${trace_seconds}" 2>/dev/null || sleep 8
+    kill -INT "${spid}" >/dev/null 2>&1 || true
+    wait "${spid}" >/dev/null 2>&1 || true
+
+    if [ ! -r "${trace_out}" ]; then
+      echo "[steam-selkies][wrap:ksmserver] strace-ice: (trace not readable: ${trace_out})" >>/config/steam-selkies.log 2>/dev/null || true
+      exit 0
+    fi
+
+    # Emit a compact summary.
+    summary="$(grep -nEi "(ICEauthority|\\.ICEauthority|ICE-unix|\\.ICE-unix|/tmp/\\.X11-unix|Xauthority|\\.Xauthority|Xau|MIT-MAGIC-COOKIE)" "${trace_out}" | head -n 220)"
+    if [ -z "${summary}" ]; then
+      echo "[steam-selkies][wrap:ksmserver] strace-ice: (no matches; inspect ${trace_out})" >>/config/steam-selkies.log 2>/dev/null || true
     else
-      printf '%s\n' "${matches}" | while IFS= read -r line; do
-        log "strace-ice: ${line}"
+      printf '%s\n' "${summary}" | while IFS= read -r line; do
+        echo "[steam-selkies][wrap:ksmserver] strace-ice: ${line}" >>/config/steam-selkies.log 2>/dev/null || true
       done
     fi
-  else
-    log "strace-ice: (trace not readable: ${trace_out})"
-  fi
 
-  exit ${rc}
+    # If we see ICE socket errors, emit a small context window around the first one.
+    err_line="$(grep -nE "(ICE-unix|\\.ICE-unix).*(ECONNREFUSED|EACCES|EPERM|ENOENT|EADDRINUSE)" "${trace_out}" | head -n 1 | cut -d: -f1)"
+    if [ -n "${err_line}" ]; then
+      start=$((err_line - 30))
+      [ ${start} -lt 1 ] && start=1
+      end=$((err_line + 60))
+      echo "[steam-selkies][wrap:ksmserver] strace-ice-context: around_line=${err_line}" >>/config/steam-selkies.log 2>/dev/null || true
+      sed -n "${start},${end}p" "${trace_out}" | head -n 140 | while IFS= read -r line; do
+        echo "[steam-selkies][wrap:ksmserver] strace-ice-context: ${line}" >>/config/steam-selkies.log 2>/dev/null || true
+      done
+    fi
+  ) &
 fi
 
 exec "${REAL_KSMSERVER}" "$@"
