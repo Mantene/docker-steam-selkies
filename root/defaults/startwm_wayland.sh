@@ -338,13 +338,22 @@ if [ -z "${display_num}" ]; then
       log "WARNING: xauth not found; X11 authentication may fail (install xauth)"
     fi
 
+    # Preserve logs per DISPLAY attempt; keep /config/xwayland.log pointing to the latest.
+    xwlog="/config/xwayland.${display_num}.log"
+    ln -sf "$(basename "${xwlog}")" /config/xwayland.log >/dev/null 2>&1 || true
+    {
+      echo "[steam-selkies][xwayland] boot $(date -Is 2>/dev/null || date) DISPLAY=${DISPLAY}"
+      echo "[steam-selkies][xwayland] SELKIES_WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY} SELKIES_XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}"
+    } >>"${xwlog}" 2>/dev/null || true
+
     log "Starting Xwayland on DISPLAY=${DISPLAY} (rootless on ${SELKIES_WAYLAND_DISPLAY})"
+    log "Xwayland log: ${xwlog} (symlink /config/xwayland.log -> ${xwlog})"
     # -ac disables access control; inside a container this avoids brittle Xauthority issues.
     run_as_abc_env \
       "HOME=${HOME}" "USER=abc" "LOGNAME=abc" \
       "XDG_RUNTIME_DIR=${SELKIES_XDG_RUNTIME_DIR}" "WAYLAND_DISPLAY=${SELKIES_WAYLAND_DISPLAY}" \
       "DISPLAY=${DISPLAY}" "XAUTHORITY=${XAUTHORITY}" "ICEAUTHORITY=${ICEAUTHORITY}" "TMPDIR=${TMPDIR}" "PATH=${PATH}" \
-      -- Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -ac -auth "${XAUTHORITY}" >/config/xwayland.log 2>&1 &
+      -- Xwayland "${DISPLAY}" -rootless -noreset -nolisten tcp -ac -auth "${XAUTHORITY}" >>"${xwlog}" 2>&1 &
     xwpid=$!
 
     i=0
@@ -353,7 +362,7 @@ if [ -z "${display_num}" ]; then
         break
       fi
       if ! kill -0 "${xwpid}" >/dev/null 2>&1; then
-        log "ERROR: Xwayland exited early (pid=${xwpid}); see /config/xwayland.log"
+        log "ERROR: Xwayland exited early (pid=${xwpid}); see ${xwlog}"
         break
       fi
       sleep 1
