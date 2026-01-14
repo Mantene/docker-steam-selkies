@@ -49,11 +49,6 @@ abc_env_args() {
 
 run_as_abc_env() {
   # Usage: run_as_abc_env VAR=... VAR=... -- cmd args...
-  if [ "$(id -u)" -ne 0 ] || ! id abc >/dev/null 2>&1; then
-    env "$@"
-    return $?
-  fi
-
   local -a envs
   envs=()
   while [ "$#" -gt 0 ]; do
@@ -64,6 +59,13 @@ run_as_abc_env() {
     envs+=("$1")
     shift
   done
+
+  # If we're already running as the target user (or 'abc' doesn't exist), just apply
+  # the env vars and run the command. Important: do NOT pass the `--` separator to `env`.
+  if [ "$(id -u)" -ne 0 ] || ! id abc >/dev/null 2>&1; then
+    env "${envs[@]}" "$@"
+    return $?
+  fi
 
   if command -v s6-setuidgid >/dev/null 2>&1; then
     s6-setuidgid abc env "${envs[@]}" "$@"
