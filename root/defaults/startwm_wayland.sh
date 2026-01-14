@@ -171,6 +171,8 @@ while [ $i -lt 50 ]; do
 done
 if [ -S "${selkies_wayland_socket}" ]; then
   log "Selkies socket: present at ${selkies_wayland_socket}"
+  # Give the compositor a brief moment to become connectable.
+  sleep 0.25
 else
   log "WARNING: Selkies socket not present at ${selkies_wayland_socket} (continuing; Xwayland may fail)"
 fi
