@@ -34,6 +34,46 @@ chmod 700 "${XDG_RUNTIME_DIR}" >/dev/null 2>&1 || true
 
 log "uid=$(id -u) gid=$(id -g) user=$(id -un 2>/dev/null || true) HOME=${HOME:-} DISPLAY=${DISPLAY:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} ICEAUTHORITY=${ICEAUTHORITY:-} XAUTHORITY=${XAUTHORITY:-}"
 
+# Workaround: we have observed libICE/Qt creating ${XDG_RUNTIME_DIR}/iceauth_* via
+# O_TMPFILE+linkat such that the resulting file can be mode 000, and then failing to
+# reopen it for writing (EACCES) which triggers SIGABRT inside ksmserver.
+# A short-lived, fast poller fixes permissions immediately after creation.
+if [ "${STEAM_DISABLE_ICEAUTH_TMP_PERMS_FIX:-0}" != "1" ]; then
+  (
+    set +e
+    dir_watch="${XDG_RUNTIME_DIR}"
+    start_ts=$(date +%s 2>/dev/null || echo 0)
+    deadline=$(( start_ts + 8 ))
+    iter=0
+    max_iter=4000
+    fixed=0
+    while :; do
+      iter=$((iter + 1))
+      now=$(date +%s 2>/dev/null || echo 0)
+      if [ ${start_ts} -gt 0 ]; then
+        [ ${now} -ge ${deadline} ] && break
+      else
+        [ ${iter} -ge ${max_iter} ] && break
+      fi
+
+      for f in "${dir_watch}"/iceauth_*; do
+        [ -e "$f" ] || continue
+        owner_uid="$(stat -c %u "$f" 2>/dev/null || echo -1)"
+        [ "${owner_uid}" = "$(id -u)" ] || continue
+
+        # If the file is owner-unwritable (commonly mode 000), fix it.
+        if [ ! -w "$f" ]; then
+          chmod 600 "$f" >/dev/null 2>&1 && fixed=$((fixed + 1))
+        fi
+      done
+
+      # Very short sleep to win the race; bounded loop duration keeps CPU impact low.
+      usleep 2000 2>/dev/null || sleep 0.002 2>/dev/null || sleep 0.01 2>/dev/null || true
+    done
+    echo "[steam-selkies][wrap:ksmserver] iceauth_tmp_perms_fix: chmodded=${fixed} dir=${dir_watch}" >>/config/steam-selkies.log 2>/dev/null || true
+  ) &
+fi
+
 if [ -n "${HOME:-}" ]; then
   if [ -e "${HOME}/.ICEauthority" ] || [ -L "${HOME}/.ICEauthority" ]; then
     log "HOME/.ICEauthority: $(ls -l "${HOME}/.ICEauthority" 2>/dev/null || true)"
