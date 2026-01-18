@@ -15,6 +15,29 @@ log() {
 	echo "[steam-selkies][dbus-helper] $*" >>/config/steam-selkies.log 2>/dev/null || true
 }
 
+try_cmd() {
+	# Run a command and log a warning if it fails.
+	# Usage: try_cmd <label> <cmd...>
+	local label="$1"
+	shift
+	local err
+	err="$({ "$@"; } 2>&1)" || {
+		log "WARNING: ${label} failed: ${err}"
+		return 1
+	}
+	return 0
+}
+
+log_fs_context() {
+	local path="$1"
+	if command -v findmnt >/dev/null 2>&1; then
+		# Helpful for diagnosing read-only/nosuid mounts.
+		local info
+		info="$(findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS --target "${path}" 2>/dev/null || true)"
+		[ -n "${info}" ] && log "Mount: ${info}"
+	fi
+}
+
 helper_candidates=(
 	/usr/lib/dbus-1.0/dbus-daemon-launch-helper
 	/usr/lib/x86_64-linux-gnu/dbus-1.0/dbus-daemon-launch-helper
@@ -77,8 +100,20 @@ for helper in "${helper_candidates[@]}"; do
 		done
 
 		# Enforce helper ownership/mode.
-		chown root:messagebus "${helper}" 2>/dev/null || true
-		chmod 4754 "${helper}" 2>/dev/null || true
+		try_cmd "chown root:messagebus ${helper}" chown root:messagebus "${helper}" || true
+
+		# Some dbus builds require the helper to be non-world-readable (4750).
+		# If it is more permissive, dbus logs: "The permission of the setuid helper is not correct".
+		if ! try_cmd "chmod 4750 ${helper}" chmod 4750 "${helper}"; then
+			log_fs_context "${helper}"
+		fi
+
+		# If perms didn't change, call it out explicitly (common with read-only rootfs or restricted caps).
+		mode_after="$(stat -c '%a' "${helper}" 2>/dev/null || true)"
+		if [ "${mode_after}" != "4750" ]; then
+			log "WARNING: helper mode is '${mode_after}' (wanted 4750); D-Bus activation may still spam logs"
+			log_fs_context "${helper}"
+		fi
 
 		log "After:  $(stat -c '%a %A %U:%G %n' "${helper_dir}" "${helper}" 2>/dev/null | tr '\n' '|' || true)"
 	fi
